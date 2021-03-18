@@ -28,12 +28,13 @@ def structure_loss(pred, mask):
 
 def train(Dataset, Network):
     ## dataset
-    cfg    = Dataset.Config(datapath='../data/DUTS', savepath='./out', mode='train', batch=32, lr=0.05, momen=0.9, decay=5e-4, epoch=32)
+    cfg    = Dataset.Config(datapath='../data/our', savepath='./out', mode='train', batch=32, lr=0.05, momen=0.9, decay=5e-4, epoch=32)
     data   = Dataset.Data(cfg)
     loader = DataLoader(data, collate_fn=data.collate, batch_size=cfg.batch, shuffle=True, num_workers=8)
     ## network
     net    = Network(cfg)
     net.train(True)
+    #net = nn.DataParallel(net,device_ids=[0,1,2,3])
     net.cuda()
     ## parameter
     base, head = [], []
@@ -48,7 +49,8 @@ def train(Dataset, Network):
     net, optimizer = amp.initialize(net, optimizer, opt_level='O2')
     sw             = SummaryWriter(cfg.savepath)
     global_step    = 0
-
+    net = nn.DataParallel(net,device_ids=[0,1,2,3])
+    net.cuda()
     for epoch in range(cfg.epoch):
         optimizer.param_groups[0]['lr'] = (1-abs((epoch+1)/(cfg.epoch+1)*2-1))*cfg.lr*0.1
         optimizer.param_groups[1]['lr'] = (1-abs((epoch+1)/(cfg.epoch+1)*2-1))*cfg.lr

@@ -55,21 +55,22 @@ class Test(object):
     def save(self):
         with torch.no_grad():
             import datetime
-            start = datetime.datetime.now()
+            #start = datetime.datetime.now()
             cnt = 1
+            total = datetime.datetime(1999,1,1)
             for image, mask, shape, name in self.loader:
-                #print('image shape: ',image.size())
-                #import sys
-                #sys.exit(0)
                	image = image.cuda().float()
+                start = datetime.datetime.now()
                 out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
+                total += datetime.datetime.now()-start
+                print("inference time: ",(total-datetime.datetime(1999,1,1))/cnt)
                 out   = out2u
                 pred  = (torch.sigmoid(out[0,0])*255).cpu().numpy()
                 head  = '../eval/maps/F3Net/'+ self.cfg.datapath.split('/')[-1]
                 if not os.path.exists(head):
                     os.makedirs(head)
                 cv2.imwrite(head+'/'+name[0]+'.png', np.round(pred))
-                print("inference time: ",(datetime.datetime.now()-start)/cnt)
+                #print("inference time: ",(datetime.datetime.now()-start)/cnt)
                 cnt +=1
 
 if __name__=='__main__':
