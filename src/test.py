@@ -34,6 +34,9 @@ class Test(object):
     def show(self):
         with torch.no_grad():
             for image, mask, shape, name in self.loader:
+                print('image.shape: ',image.shape)
+                import sys
+                sys.exit(0)
                 image, mask = image.cuda().float(), mask.cuda().float()
                 out1u, out2u, out2r, out3r, out4r, out5r = self.net(image)
                 out = out2u
@@ -51,8 +54,14 @@ class Test(object):
     
     def save(self):
         with torch.no_grad():
+            import datetime
+            start = datetime.datetime.now()
+            cnt = 1
             for image, mask, shape, name in self.loader:
-                image = image.cuda().float()
+                #print('image shape: ',image.size())
+                #import sys
+                #sys.exit(0)
+               	image = image.cuda().float()
                 out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
                 out   = out2u
                 pred  = (torch.sigmoid(out[0,0])*255).cpu().numpy()
@@ -60,10 +69,12 @@ class Test(object):
                 if not os.path.exists(head):
                     os.makedirs(head)
                 cv2.imwrite(head+'/'+name[0]+'.png', np.round(pred))
-
+                print("inference time: ",(datetime.datetime.now()-start)/cnt)
+                cnt +=1
 
 if __name__=='__main__':
-    for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
+    #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
+     for path in ['../data/DUTS']:
         t = Test(dataset, F3Net, path)
         t.save()
         # t.show()
