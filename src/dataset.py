@@ -27,11 +27,11 @@ class RandomCrop(object):
         offseth = 0 if randh == 0 else np.random.randint(randh)
         offsetw = 0 if randw == 0 else np.random.randint(randw)
         p0, p1, p2, p3 = offseth, H+offseth-randh, offsetw, W+offsetw-randw #cunzai bug quedingyixia zai shen mo qingkaungxia jiang caihou mask.shape() h*w =0
-        tmp_mask = mask[p0:p1,p2:p3]
-        if self.cal_shape(tmp_mask):
-            return image[p0:p1,p2:p3, :], mask
-        else:
-            return image[p0:p1,p2:p3, :], mask[p0:p1,p2:p3]
+        #tmp_mask = mask[p0:p1,p2:p3]
+        #if self.cal_shape(tmp_mask):
+        #    return image[p0:p1,p2:p3, :], mask
+        #else:
+        return image[p0:p1,p2:p3, :], mask[p0:p1,p2:p3]
 
     def cal_shape(array):
         h, w = array.shape
