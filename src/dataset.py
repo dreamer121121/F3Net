@@ -18,6 +18,7 @@ class Normalize(object):
         mask /= 255
         return image, mask
 
+
 class RandomCrop(object):
     def __call__(self, image, mask):
         H,W,_   = image.shape
@@ -25,8 +26,18 @@ class RandomCrop(object):
         randh   = np.random.randint(H/8)
         offseth = 0 if randh == 0 else np.random.randint(randh)
         offsetw = 0 if randw == 0 else np.random.randint(randw)
-        p0, p1, p2, p3 = offseth, H+offseth-randh, offsetw, W+offsetw-randw
-        return image[p0:p1,p2:p3, :], mask[p0:p1,p2:p3]
+        p0, p1, p2, p3 = offseth, H+offseth-randh, offsetw, W+offsetw-randw #cunzai bug quedingyixia zai shen mo qingkaungxia jiang caihou mask.shape() h*w =0
+        tmp_mask = mask[p0:p1,p2:p3]
+        if self.cal_shape(tmp_mask):
+            return image[p0:p1,p2:p3, :], mask
+        else:
+            return image[p0:p1,p2:p3, :], mask[p0:p1,p2:p3]
+
+    def cal_shape(array):
+        h, w = array.shape
+        if h * w == 0:
+            return True
+
 
 class RandomFlip(object):
     def __call__(self, image, mask):
@@ -69,7 +80,7 @@ class Config(object):
         else:
             return None
 
-
+f = open('error_sample.txt','w')
 ########################### Dataset Class ###########################
 class Data(Dataset):
     def __init__(self, cfg):
@@ -86,9 +97,16 @@ class Data(Dataset):
 
     def __getitem__(self, idx):
         name  = self.samples[idx]
-        #print('-----img  name ----',self.cfg.datapath+'/image/'+name+'.jpg')
+        self.name = name
+        # print('-----img  name ----',self.cfg.datapath+'/image/'+name+'.jpg')
         image = cv2.imread(self.cfg.datapath+'/image/'+name+'.jpg')[:,:,::-1].astype(np.float32)
         mask  = cv2.imread(self.cfg.datapath+'/mask/' +name+'.png', 0).astype(np.float32)
+        # if len(image.shape) != 3
+        # # print("img shape: ",image.shape)
+        # # print("mask shape:",mask.shape)
+        # # import sys
+        # # sys.exit(0)
+
         shape = mask.shape
 
         if self.cfg.mode=='train':
@@ -106,8 +124,12 @@ class Data(Dataset):
         size = [224, 256, 288, 320, 352][np.random.randint(0, 5)]
         image, mask = [list(item) for item in zip(*batch)]
         for i in range(len(batch)):
-            image[i] = cv2.resize(image[i], dsize=(size, size), interpolation=cv2.INTER_LINEAR)
-            mask[i]  = cv2.resize(mask[i],  dsize=(size, size), interpolation=cv2.INTER_LINEAR)
+            try:
+                image[i] = cv2.resize(image[i], dsize=(size, size), interpolation=cv2.INTER_LINEAR)
+                mask[i]  = cv2.resize(mask[i],  dsize=(size, size), interpolation=cv2.INTER_LINEAR)
+            except:
+                print("name: ",self.name)
+                print("maks.shape: ",mask[i].shape)
         image = torch.from_numpy(np.stack(image, axis=0)).permute(0,3,1,2)
         mask  = torch.from_numpy(np.stack(mask, axis=0)).unsqueeze(1)
         return image, mask

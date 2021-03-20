@@ -14,6 +14,14 @@ from tensorboardX import SummaryWriter
 import dataset
 from net  import F3Net
 from apex import amp
+from apex.parallel import convert_syncbn_model
+# from apex.parallel import DistributedDataParallel as DDP
+# from torch.nn.parallel import DistributedDataParallel as DDP
+
+
+log_stream = open('train.log','a')
+# torch.cuda.set_device(4)
+# torch.distributed.init_process_group(backend='nccl') #must init the process_group if use the distributed.parallel
 
 def structure_loss(pred, mask):
     weit  = 1+5*torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15)-mask)
@@ -30,12 +38,12 @@ def train(Dataset, Network):
     ## dataset
     cfg    = Dataset.Config(datapath='../data/our', savepath='./out', mode='train', batch=32, lr=0.05, momen=0.9, decay=5e-4, epoch=32)
     data   = Dataset.Data(cfg)
-    loader = DataLoader(data, collate_fn=data.collate, batch_size=cfg.batch, shuffle=True, num_workers=8)
+    #train_sampler = torch.utils.data.distributed.DistributedSampler(data)
+    loader = DataLoader(data,collate_fn=data.collate, batch_size=cfg.batch, shuffle=True, num_workers=8)
     ## network
     net    = Network(cfg)
     net.train(True)
-    #net = nn.DataParallel(net,device_ids=[0,1,2,3])
-    net.cuda()
+
     ## parameter
     base, head = [], []
     for name, param in net.named_parameters():
@@ -46,11 +54,20 @@ def train(Dataset, Network):
         else:
             head.append(param)
     optimizer      = torch.optim.SGD([{'params':base}, {'params':head}], lr=cfg.lr, momentum=cfg.momen, weight_decay=cfg.decay, nesterov=True)
-    net, optimizer = amp.initialize(net, optimizer, opt_level='O2')
+    #net, optimizer = amp.initialize(net, optimizer, opt_level='O2')
     sw             = SummaryWriter(cfg.savepath)
     global_step    = 0
+
+    resume = False
+    if resume:
+        checkpoints = torch.load("")
+        net.load_state_dict(checkpoints)
+        optimizer.load_state_dict(torch.load(''))
+
+    #torch.distributed.init_process_group('nccl',init_method='file:///home/.../my_file',world_size=1,rank=0)
     net = nn.DataParallel(net,device_ids=[0,1,2,3])
     net.cuda()
+
     for epoch in range(cfg.epoch):
         optimizer.param_groups[0]['lr'] = (1-abs((epoch+1)/(cfg.epoch+1)*2-1))*cfg.lr*0.1
         optimizer.param_groups[1]['lr'] = (1-abs((epoch+1)/(cfg.epoch+1)*2-1))*cfg.lr
@@ -69,8 +86,9 @@ def train(Dataset, Network):
             loss   = (loss1u+loss2u)/2+loss2r/2+loss3r/4+loss4r/8+loss5r/16
 
             optimizer.zero_grad()
-            with amp.scale_loss(loss, optimizer) as scale_loss:
-                scale_loss.backward()
+#            with amp.scale_loss(loss, optimizer) as scale_loss:
+#                scale_loss.backward()
+            loss.backward()
             optimizer.step()
 
             ## log
@@ -78,7 +96,8 @@ def train(Dataset, Network):
             sw.add_scalar('lr'   , optimizer.param_groups[0]['lr'], global_step=global_step)
             sw.add_scalars('loss', {'loss1u':loss1u.item(), 'loss2u':loss2u.item(), 'loss2r':loss2r.item(), 'loss3r':loss3r.item(), 'loss4r':loss4r.item(), 'loss5r':loss5r.item()}, global_step=global_step)
             if step%10 == 0:
-                print('%s | step:%d/%d/%d | lr=%.6f | loss=%.6f'%(datetime.datetime.now(), global_step, epoch+1, cfg.epoch, optimizer.param_groups[0]['lr'], loss.item()))
+                log_stream.write('%s | step:%d/%d/%d | lr=%.6f | loss=%.6f \n'%(datetime.datetime.now(), global_step, epoch+1, cfg.epoch, optimizer.param_groups[0]['lr'], loss.item()))
+                log_stream.flush()
 
         if epoch>cfg.epoch/3*2:
             torch.save(net.state_dict(), cfg.savepath+'/model-'+str(epoch+1))
