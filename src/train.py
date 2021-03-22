@@ -36,10 +36,10 @@ def structure_loss(pred, mask):
 
 def train(Dataset, Network):
     ## dataset
-    cfg    = Dataset.Config(datapath='../data/our', savepath='./out', mode='train', batch=32, lr=0.05, momen=0.9, decay=5e-4, epoch=32)
+    cfg    = Dataset.Config(datapath='../data/our', savepath='./out', mode='train', batch=32, lr=0.05, momen=0.9, decay=5e-4, epoch=600)
     data   = Dataset.Data(cfg)
     #train_sampler = torch.utils.data.distributed.DistributedSampler(data)
-    loader = DataLoader(data,collate_fn=data.collate, batch_size=cfg.batch, shuffle=True, num_workers=8)
+    loader = DataLoader(data,collate_fn=data.collate, batch_size=cfg.batch, shuffle=True, num_workers=16)
     ## network
     net    = Network(cfg)
     net.train(True)
@@ -58,24 +58,31 @@ def train(Dataset, Network):
     sw             = SummaryWriter(cfg.savepath)
     global_step    = 0
 
-    resume = False
-    if resume:
-        checkpoints = torch.load("")
-        net.load_state_dict(checkpoints)
-        optimizer.load_state_dict(torch.load(''))
+    #resume = True
+    #if resume:
+    #    checkpoints = torch.load("./out/model-100")
+    #    net.load_state_dict(checkpoints)
+        #optimizer.load_state_dict(torch.load(''))
 
     #torch.distributed.init_process_group('nccl',init_method='file:///home/.../my_file',world_size=1,rank=0)
     net = nn.DataParallel(net,device_ids=[0,1,2,3])
     net.cuda()
 
-    for epoch in range(cfg.epoch):
+    resume = True
+    if resume:
+        checkpoints = torch.load("./out/model-100")
+        net.load_state_dict(checkpoints)
+        #optimizer.load_state_dict(torch.load(''))
+
+
+
+    for epoch in range(100,cfg.epoch):
         optimizer.param_groups[0]['lr'] = (1-abs((epoch+1)/(cfg.epoch+1)*2-1))*cfg.lr*0.1
         optimizer.param_groups[1]['lr'] = (1-abs((epoch+1)/(cfg.epoch+1)*2-1))*cfg.lr
 
         for step, (image, mask) in enumerate(loader):
             image, mask = image.cuda().float(), mask.cuda().float()
             out1u, out2u, out2r, out3r, out4r, out5r = net(image)
-
             loss1u = structure_loss(out1u, mask)
             loss2u = structure_loss(out2u, mask)
 
@@ -100,7 +107,7 @@ def train(Dataset, Network):
                 log_stream.flush()
 
         if epoch>cfg.epoch/3*2:
-            torch.save(net.state_dict(), cfg.savepath+'/model-'+str(epoch+1))
+            torch.save(net.state_dict(), cfg.savepath+'/model-'+str(epoch+1)+'.pth')
 
 
 if __name__=='__main__':

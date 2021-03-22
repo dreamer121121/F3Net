@@ -33,10 +33,10 @@ class RandomCrop(object):
         #else:
         return image[p0:p1,p2:p3, :], mask[p0:p1,p2:p3]
 
-    def cal_shape(array):
-        h, w = array.shape
-        if h * w == 0:
-            return True
+    #def cal_shape(array):
+    #    h, w = array.shape
+    #    if h * w == 0:
+    #        return True
 
 
 class RandomFlip(object):
@@ -80,7 +80,7 @@ class Config(object):
         else:
             return None
 
-f = open('error_sample.txt','w')
+#f = open('error_sample.txt','w')
 ########################### Dataset Class ###########################
 class Data(Dataset):
     def __init__(self, cfg):

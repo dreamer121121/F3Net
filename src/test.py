@@ -23,7 +23,7 @@ from net  import F3Net
 class Test(object):
     def __init__(self, Dataset, Network, path):
         ## dataset
-        self.cfg    = Dataset.Config(datapath=path, snapshot='./out/model-32', mode='test')
+        self.cfg    = Dataset.Config(datapath=path, snapshot='./out/model-100', mode='test')
         self.data   = Dataset.Data(self.cfg)
         self.loader = DataLoader(self.data, batch_size=1, shuffle=False, num_workers=8)
         ## network
