@@ -187,12 +187,14 @@ class F3Net(nn.Module):
 
 
     def initialize(self):
-        if self.cfg.snapshot:
+        if self.cfg.snapshot: #finetune
             checkpoints = torch.load(self.cfg.snapshot)
             fielter_checkpoints = dict()
             for k,v in checkpoints.items():
                 if "module" in k:
                     fielter_checkpoints[k[7:]] = v
+                else:
+                    fielter_checkpoints[k] = v
             self.load_state_dict(fielter_checkpoints)
         else:
             weight_init(self)
