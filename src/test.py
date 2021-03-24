@@ -59,7 +59,10 @@ class Test(object):
             cnt = 1
             total = datetime.datetime(1999,1,1)
             for image, mask, shape, name in self.loader:
-               	image = image.cuda().float()
+                #image.shape (1,3,352,352)
+                #shape: init img shape ,which is for pre_mask to match the size of init img
+
+                image = image.cuda().float()
                 start = datetime.datetime.now()
                 out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
                 total += datetime.datetime.now()-start
@@ -75,7 +78,8 @@ class Test(object):
 
 if __name__=='__main__':
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
-     for path in ['../data/DUTS']:
+     for path in ['../data/HKU-IS']:
+        print("path:",path)
         t = Test(dataset, F3Net, path)
         t.save()
         # t.show()

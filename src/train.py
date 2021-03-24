@@ -13,8 +13,8 @@ from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 import dataset
 from net  import F3Net
-from apex import amp
-from apex.parallel import convert_syncbn_model
+#from apex import amp
+#from apex.parallel import convert_syncbn_model
 # from apex.parallel import DistributedDataParallel as DDP
 # from torch.nn.parallel import DistributedDataParallel as DDP
 
@@ -36,7 +36,7 @@ def structure_loss(pred, mask):
 
 def train(Dataset, Network):
     ## dataset
-    cfg    = Dataset.Config(datapath='../data/our', savepath='./out', mode='train', batch=32, lr=0.05, momen=0.9, decay=5e-4, epoch=600)
+    cfg    = Dataset.Config(datapath='../data/train_data_no_opv6/', savepath='./out', mode='train', batch=32, lr=0.05, momen=0.9, decay=5e-4, epoch=100)
     data   = Dataset.Data(cfg)
     #train_sampler = torch.utils.data.distributed.DistributedSampler(data)
     loader = DataLoader(data,collate_fn=data.collate, batch_size=cfg.batch, shuffle=True, num_workers=16)
@@ -68,7 +68,7 @@ def train(Dataset, Network):
     net = nn.DataParallel(net,device_ids=[0,1,2,3])
     net.cuda()
 
-    resume = True
+    resume = False
     if resume:
         checkpoints = torch.load("./out/model-100")
         net.load_state_dict(checkpoints)
@@ -76,10 +76,9 @@ def train(Dataset, Network):
 
 
 
-    for epoch in range(100,cfg.epoch):
+    for epoch in range(cfg.epoch):
         optimizer.param_groups[0]['lr'] = (1-abs((epoch+1)/(cfg.epoch+1)*2-1))*cfg.lr*0.1
         optimizer.param_groups[1]['lr'] = (1-abs((epoch+1)/(cfg.epoch+1)*2-1))*cfg.lr
-
         for step, (image, mask) in enumerate(loader):
             image, mask = image.cuda().float(), mask.cuda().float()
             out1u, out2u, out2r, out3r, out4r, out5r = net(image)
@@ -105,9 +104,10 @@ def train(Dataset, Network):
             if step%10 == 0:
                 log_stream.write('%s | step:%d/%d/%d | lr=%.6f | loss=%.6f \n'%(datetime.datetime.now(), global_step, epoch+1, cfg.epoch, optimizer.param_groups[0]['lr'], loss.item()))
                 log_stream.flush()
-
-        if epoch>cfg.epoch/3*2:
-            torch.save(net.state_dict(), cfg.savepath+'/model-'+str(epoch+1)+'.pth')
+        
+        if epoch>5:
+            torch.save(net.state_dict(), cfg.savepath+'/model-'+str(epoch+1))
+            torch.save(optimizer.state_dict(),cfg.savepath+'/opt-'+str(epoch+1))
 
 
 if __name__=='__main__':
