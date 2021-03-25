@@ -48,7 +48,7 @@ def structure_loss(pred, mask):
 
 
 def main(Dataset,Network):
-    train_cfg = Dataset.Config(datapath='../data/train_data_no_opv6/', savepath='./out', mode='train', batch=32,
+    train_cfg = Dataset.Config(datapath='../data/DUTS/', savepath='./out', mode='train', batch=32,
                             lr=0.05, momen=0.9, decay=5e-4, epochs=100)
     eval_cfg =  Dataset.Config(datapath='../data/DUTS/', mode='test',eval_freq=1)
 
@@ -56,8 +56,8 @@ def main(Dataset,Network):
 
     eval_data = Dataset.Data(eval_cfg)
 
-    train_dataloader = DataLoader(train_data,collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True, num_workers=16)
-    eval_dataloader =  DataLoader(eval_data, batch_size=1, shuffle=False, num_workers=8)
+    train_dataloader = DataLoader(train_data,collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True, num_workers=0)
+    eval_dataloader =  DataLoader(eval_data, batch_size=1, shuffle=False, num_workers=0)
 
     net    = Network(train_cfg)
     net.train(True)
@@ -75,12 +75,17 @@ def main(Dataset,Network):
     optimizer      = torch.optim.SGD([{'params':base}, {'params':head}], lr=train_cfg.lr, momentum=train_cfg.momen, weight_decay=train_cfg.decay, nesterov=True)
     sw             = SummaryWriter(train_cfg.savepath)
 
-    net = nn.DataParallel(net,device_ids=[0,1,2,3])
+    #net = nn.DataParallel(net,device_ids=[0,1,2,3])
     net.cuda()
 
+    eva = True
+    if eva:
+        evaluate(net,eval_dataloader)
+
     for epoch in range(train_cfg.epochs):
-        optimizer.param_groups[0]['lr'] = (1-abs((epoch+1)/(train_cfg.epoch+1)*2-1))*train_cfg.lr*0.1
-        optimizer.param_groups[1]['lr'] = (1-abs((epoch+1)/(train_cfg.epoch+1)*2-1))*train_cfg.lr
+        log_stream.write('='*30+'Epoch: '+str(epoch)+'='*30+'\n')
+        optimizer.param_groups[0]['lr'] = (1-abs((epoch+1)/(train_cfg.epochs+1)*2-1))*train_cfg.lr*0.1
+        optimizer.param_groups[1]['lr'] = (1-abs((epoch+1)/(train_cfg.epochs+1)*2-1))*train_cfg.lr
 
         train(net,optimizer,train_dataloader,sw,epoch,train_cfg)
 
@@ -98,7 +103,7 @@ def main(Dataset,Network):
                 'best_mae':best_mae,
             }, is_best,epoch,train_cfg)
 
-            log_stream.write('MAE: {:.4f}'.format(mae))
+            log_stream.write('Valid MAE: {:.4f}'.format(mae))
             log_stream.flush()
 
 
@@ -107,10 +112,11 @@ def evaluate(net,loader):
 
     with torch.no_grad():
         for image, mask, shape, name in loader:
+            print('---image---',image.shape)
             image = image.cuda().float()
-            start = datetime.datetime.now()
             out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
             out = out2u
+            print('-----out----',out.shape)
             pred = (torch.sigmoid(out[0, 0])).cpu().numpy()
 
             mask[mask > 0.5] = 1
@@ -153,9 +159,9 @@ def train(net,optimizer,loader,sw,epoch,cfg):
         sw.add_scalar('lr'   , optimizer.param_groups[0]['lr'], global_step=global_step)
         sw.add_scalars('loss', {'loss1u':loss1u.item(), 'loss2u':loss2u.item(), 'loss2r':loss2r.item(), 'loss3r':loss3r.item(), 'loss4r':loss4r.item(), 'loss5r':loss5r.item()}, global_step=global_step)
         if step%10 == 0:
-            log_stream.write('%s | step:%d/%d/%d | lr=%.6f | loss=%.6f \n'%(datetime.datetime.now(), global_step, epoch+1, cfg.epoch, optimizer.param_groups[0]['lr'], loss.item()))
+            log_stream.write('%s | step:%d/%d/%d | lr=%.6f | loss=%.6f \n'%(datetime.datetime.now(), global_step, epoch+1, cfg.epochs, optimizer.param_groups[0]['lr'], loss.item()))
             log_stream.flush()
 
 
 if __name__=='__main__':
-    train(dataset, F3Net)
+    main(dataset, F3Net)
