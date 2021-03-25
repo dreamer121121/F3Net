@@ -2,26 +2,38 @@
 #coding=utf-8
 
 import sys
+import os
 import datetime
+
 sys.path.insert(0, '../')
 sys.dont_write_bytecode = True
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
+
+
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 import dataset
 from net  import F3Net
-#from apex import amp
-#from apex.parallel import convert_syncbn_model
-# from apex.parallel import DistributedDataParallel as DDP
-# from torch.nn.parallel import DistributedDataParallel as DDP
+import shutil
+
+
+from saliency_metrics import cal_mae,cal_fm,cal_sm,cal_em,cal_wfm
 
 
 log_stream = open('train.log','a')
-# torch.cuda.set_device(4)
-# torch.distributed.init_process_group(backend='nccl') #must init the process_group if use the distributed.parallel
+
+global_step = 0
+best_mae = float('inf')
+
+def save_checkpoints(state, is_best, epoch,cfg):
+	torch.save(state, '%s/%s_%dcheckpoint.pth.tar' % (os.path.join(cfg.savepath), 'model',epoch))
+	if is_best:
+		shutil.copyfile('%s/%s_%dcheckpoint.pth.tar' % (os.path.join(cfg.savepath), 'model',epoch),'%s/%s_best.pth.tar' % (os.path.join(cfg.savepath), 'model'))
+
 
 def structure_loss(pred, mask):
     weit  = 1+5*torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15)-mask)
@@ -34,16 +46,22 @@ def structure_loss(pred, mask):
     wiou  = 1-(inter+1)/(union-inter+1)
     return (wbce+wiou).mean()
 
-def train(Dataset, Network):
-    ## dataset
-    cfg    = Dataset.Config(datapath='../data/train_data_no_opv6/', savepath='./out', mode='train', batch=32,
-                            lr=0.05, momen=0.9, decay=5e-4, epoch=100,snapshot='./out/model-8')
-    data   = Dataset.Data(cfg)
-    #train_sampler = torch.utils.data.distributed.DistributedSampler(data)
-    loader = DataLoader(data,collate_fn=data.collate, batch_size=cfg.batch, shuffle=True, num_workers=16)
-    ## network
-    net    = Network(cfg)
+
+def main(Dataset,Network):
+    train_cfg = Dataset.Config(datapath='../data/train_data_no_opv6/', savepath='./out', mode='train', batch=32,
+                            lr=0.05, momen=0.9, decay=5e-4, epochs=100)
+    eval_cfg =  Dataset.Config(datapath='../data/DUTS/', mode='test',eval_freq=1)
+
+    train_data = Dataset.Data(train_cfg)
+
+    eval_data = Dataset.Data(eval_cfg)
+
+    train_dataloader = DataLoader(train_data,collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True, num_workers=16)
+    eval_dataloader =  DataLoader(eval_data, batch_size=1, shuffle=False, num_workers=8)
+
+    net    = Network(train_cfg)
     net.train(True)
+
 
     ## parameter
     base, head = [], []
@@ -54,65 +72,89 @@ def train(Dataset, Network):
             base.append(param)
         else:
             head.append(param)
-    optimizer      = torch.optim.SGD([{'params':base}, {'params':head}], lr=cfg.lr, momentum=cfg.momen, weight_decay=cfg.decay, nesterov=True)
-    #net, optimizer = amp.initialize(net, optimizer, opt_level='O2')
-    sw             = SummaryWriter(cfg.savepath)
-    global_step    = 0
+    optimizer      = torch.optim.SGD([{'params':base}, {'params':head}], lr=train_cfg.lr, momentum=train_cfg.momen, weight_decay=train_cfg.decay, nesterov=True)
+    sw             = SummaryWriter(train_cfg.savepath)
 
-    #resume = True
-    #if resume:
-    #    checkpoints = torch.load("./out/model-100")
-    #    net.load_state_dict(checkpoints)
-        #optimizer.load_state_dict(torch.load(''))
-
-    #torch.distributed.init_process_group('nccl',init_method='file:///home/.../my_file',world_size=1,rank=0)
     net = nn.DataParallel(net,device_ids=[0,1,2,3])
     net.cuda()
 
-    #
-    # resume = False
-    # if resume:
-    #     checkpoints = torch.load("./out/model-100")
-    #     net.load_state_dict(checkpoints)
-    #     #optimizer.load_state_dict(torch.load(''))
-    #
+    for epoch in range(train_cfg.epochs):
+        optimizer.param_groups[0]['lr'] = (1-abs((epoch+1)/(train_cfg.epoch+1)*2-1))*train_cfg.lr*0.1
+        optimizer.param_groups[1]['lr'] = (1-abs((epoch+1)/(train_cfg.epoch+1)*2-1))*train_cfg.lr
 
-    for epoch in range(cfg.epoch):
-        optimizer.param_groups[0]['lr'] = (1-abs((epoch+1)/(cfg.epoch+1)*2-1))*cfg.lr*0.1
-        optimizer.param_groups[1]['lr'] = (1-abs((epoch+1)/(cfg.epoch+1)*2-1))*cfg.lr
-        for step, (image, mask) in enumerate(loader):
-            image, mask = image.cuda().float(), mask.cuda().float()
-            # print(image.shape) #(32,3,320,320)
-            # print(mask.shape) #(32,1,320,320)
-            # import sys
-            # sys.exit(0)
-            out1u, out2u, out2r, out3r, out4r, out5r = net(image)
-            loss1u = structure_loss(out1u, mask)
-            loss2u = structure_loss(out2u, mask)
+        train(net,optimizer,train_dataloader,sw,epoch,train_cfg)
 
-            loss2r = structure_loss(out2r, mask)
-            loss3r = structure_loss(out3r, mask)
-            loss4r = structure_loss(out4r, mask)
-            loss5r = structure_loss(out5r, mask)
-            loss   = (loss1u+loss2u)/2+loss2r/2+loss3r/4+loss4r/8+loss5r/16
+        if (epoch + 1) % eval_cfg.eval_freq == 0 or epoch == train_cfg.epochs - 1:
 
-            optimizer.zero_grad()
-#            with amp.scale_loss(loss, optimizer) as scale_loss:
-#                scale_loss.backward()
-            loss.backward()
-            optimizer.step()
+            mae = evaluate(net,eval_dataloader)
 
-            ## log
-            global_step += 1
-            sw.add_scalar('lr'   , optimizer.param_groups[0]['lr'], global_step=global_step)
-            sw.add_scalars('loss', {'loss1u':loss1u.item(), 'loss2u':loss2u.item(), 'loss2r':loss2r.item(), 'loss3r':loss3r.item(), 'loss4r':loss4r.item(), 'loss5r':loss5r.item()}, global_step=global_step)
-            if step%10 == 0:
-                log_stream.write('%s | step:%d/%d/%d | lr=%.6f | loss=%.6f \n'%(datetime.datetime.now(), global_step, epoch+1, cfg.epoch, optimizer.param_groups[0]['lr'], loss.item()))
-                log_stream.flush()
-        
-        if epoch>5:
-            torch.save(net.state_dict(), cfg.savepath+'/model-'+str(epoch+1))
-            torch.save(optimizer.state_dict(),cfg.savepath+'/opt-'+str(epoch+1))
+            global best_mae
+            is_best = mae < best_mae
+            best_mae = min(mae,best_mae)
+
+            save_checkpoints({
+                'epoch':epoch+1,
+                'state_dict':net.state_dict(),
+                'best_mae':best_mae,
+            }, is_best,epoch,train_cfg)
+
+            log_stream.write('MAE: {:.4f}'.format(mae))
+            log_stream.flush()
+
+
+def evaluate(net,loader):
+    mae = cal_mae()
+
+    with torch.no_grad():
+        for image, mask, shape, name in loader:
+            image = image.cuda().float()
+            start = datetime.datetime.now()
+            out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
+            out = out2u
+            pred = (torch.sigmoid(out[0, 0])).cpu().numpy()
+
+            mask[mask > 0.5] = 1
+            mask[mask != 1] = 0
+
+            if pred.max() == pred.min():
+                pred = pred/255
+            else:
+                pred = (pred - pred.min()) / (pred.max() - pred.min())
+            mae.update(pred,mask)
+        Mae = mae.show()
+
+    return Mae
+
+def train(net,optimizer,loader,sw,epoch,cfg):
+
+    for step, (image, mask) in enumerate(loader):
+        image, mask = image.cuda().float(), mask.cuda().float()
+        # print(image.shape) #(32,3,320,320)
+        # print(mask.shape) #(32,1,320,320)
+        # import sys
+        # sys.exit(0)
+        out1u, out2u, out2r, out3r, out4r, out5r = net(image)
+        loss1u = structure_loss(out1u, mask)
+        loss2u = structure_loss(out2u, mask)
+
+        loss2r = structure_loss(out2r, mask)
+        loss3r = structure_loss(out3r, mask)
+        loss4r = structure_loss(out4r, mask)
+        loss5r = structure_loss(out5r, mask)
+        loss   = (loss1u+loss2u)/2+loss2r/2+loss3r/4+loss4r/8+loss5r/16
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        ## log
+        global global_step
+        global_step += 1
+        sw.add_scalar('lr'   , optimizer.param_groups[0]['lr'], global_step=global_step)
+        sw.add_scalars('loss', {'loss1u':loss1u.item(), 'loss2u':loss2u.item(), 'loss2r':loss2r.item(), 'loss3r':loss3r.item(), 'loss4r':loss4r.item(), 'loss5r':loss5r.item()}, global_step=global_step)
+        if step%10 == 0:
+            log_stream.write('%s | step:%d/%d/%d | lr=%.6f | loss=%.6f \n'%(datetime.datetime.now(), global_step, epoch+1, cfg.epoch, optimizer.param_groups[0]['lr'], loss.item()))
+            log_stream.flush()
 
 
 if __name__=='__main__':
