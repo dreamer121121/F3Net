@@ -86,15 +86,16 @@ def train(Dataset, Network):
             # print(mask.shape) #(32,1,320,320)
             # import sys
             # sys.exit(0)
-            out1u, out2u, out2r, out3r, out4r, out5r = net(image)
+            out1u, out2u, out3u,out2r, out3r, out4r, out5r = net(image)
             loss1u = structure_loss(out1u, mask)
             loss2u = structure_loss(out2u, mask)
+            loss3u = structure_loss(out3u,mask)
 
             loss2r = structure_loss(out2r, mask)
             loss3r = structure_loss(out3r, mask)
             loss4r = structure_loss(out4r, mask)
             loss5r = structure_loss(out5r, mask)
-            loss   = (loss1u+loss2u)/2+loss2r/2+loss3r/4+loss4r/8+loss5r/16
+            loss   = (loss1u+loss2u+loss3u)/3+loss2r/2+loss3r/4+loss4r/8+loss5r/16
 
             optimizer.zero_grad()
 #            with amp.scale_loss(loss, optimizer) as scale_loss:
