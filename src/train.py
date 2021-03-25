@@ -118,7 +118,11 @@ def evaluate(net,loader):
             out = out2u
             print('-----out----',out.shape)
             pred = (torch.sigmoid(out[0, 0])).cpu().numpy()
-            
+
+            if pred.size() != mask.size():
+                x,y = pred.size
+                mask = mask.resize(x,y)
+
             mask = np.asarray(mask,np.float32)
             mask /= (mask.max()+1e-8)
             

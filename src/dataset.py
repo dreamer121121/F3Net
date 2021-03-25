@@ -101,6 +101,8 @@ class Data(Dataset):
         #print('-----img  name ----',self.cfg.datapath+'/image/'+name+'.jpg')
         image = cv2.imread(self.cfg.datapath+'/image/'+name+'.jpg')[:,:,::-1].astype(np.float32)
         mask  = cv2.imread(self.cfg.datapath+'/mask/' +name+'.png', 0).astype(np.float32)
+
+
         # if len(image.shape) != 3
         # # print("img shape: ",image.shape)
         # # print("mask shape:",mask.shape)
