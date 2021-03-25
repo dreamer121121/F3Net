@@ -51,11 +51,14 @@ class Resize(object):
         self.H = H
         self.W = W
 
-    def __call__(self, image, mask):
-        image = cv2.resize(image, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
-        mask  = cv2.resize( mask, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
-        return image, mask
-
+    def __call__(self, image, mask,mode='train'):
+        if mode == 'train':
+            image = cv2.resize(image, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
+            mask  = cv2.resize( mask, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
+            return image, mask
+        else:
+            image = cv2.resize(image, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
+            return image,mask
 class ToTensor(object):
     def __call__(self, image, mask):
         image = torch.from_numpy(image)
@@ -118,7 +121,7 @@ class Data(Dataset):
             return image, mask
         else:
             image, mask = self.normalize(image, mask)
-            image, mask = self.resize(image, mask)
+            image, mask = self.resize(image, mask, self.cfg.mode)
             image, mask = self.totensor(image, mask)
             return image, mask, shape, name
 
@@ -138,6 +141,9 @@ class Data(Dataset):
 
     def __len__(self):
         return len(self.samples)
+
+
+
 
 
 ########################### Testing Script ###########################

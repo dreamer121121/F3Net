@@ -122,7 +122,6 @@ def evaluate(net,loader):
             if pred.size() != mask.size():
                 x,y = pred.size
                 mask = mask.resize(x,y)
-
             mask = np.asarray(mask,np.float32)
             mask /= (mask.max()+1e-8)
             
