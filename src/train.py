@@ -118,10 +118,14 @@ def evaluate(net,loader):
             out = out2u
             print('-----out----',out.shape)
             pred = (torch.sigmoid(out[0, 0])).cpu().numpy()
-
+            
+            mask = np.asarray(mask,np.float32)
+            mask /= (mask.max()+1e-8)
+            
             mask[mask > 0.5] = 1
             mask[mask != 1] = 0
-
+            
+            pred = np.array(pred)
             if pred.max() == pred.min():
                 pred = pred/255
             else:
