@@ -5,11 +5,11 @@ from PIL import Image
 import torchvision.transforms as transforms
 
 
-dataset_path = '' ##gt_path
+dataset_path = '..' ##gt_path
 
 dataset_path_pre = '..'  ##pre_salmap_path
 
-test_datasets = ['HKU-IS']     ##test_datasets_name
+test_datasets = ['DUTS']     ##test_datasets_name
 
 class eval_dataset:
     def __init__(self, image_root, gt_root):
@@ -43,7 +43,7 @@ class eval_dataset:
 
 for dataset in test_datasets:
     sal_root = dataset_path_pre  +'/eval/maps/F3Net/'+dataset
-    gt_root = dataset_path  +'/root/xt5/F3Net/data/'+dataset+'/mask/'
+    gt_root = dataset_path  +'/data/'+dataset+'/mask/'
     test_loader = eval_dataset(sal_root, gt_root)
     mae,fm,sm,em,wfm= cal_mae(),cal_fm(test_loader.size),cal_sm(),cal_em(),cal_wfm()
     f = open(dataset+'-eval.txt','w')

@@ -56,8 +56,8 @@ def main(Dataset,Network):
 
     eval_data = Dataset.Data(eval_cfg)
 
-    train_dataloader = DataLoader(train_data,collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True, num_workers=0)
-    eval_dataloader =  DataLoader(eval_data, batch_size=1, shuffle=False, num_workers=0)
+    train_dataloader = DataLoader(train_data,collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True, num_workers=16)
+    eval_dataloader =  DataLoader(eval_data, batch_size=1, shuffle=False, num_workers=16)
 
     net    = Network(train_cfg)
     net.train(True)
@@ -75,15 +75,15 @@ def main(Dataset,Network):
     optimizer      = torch.optim.SGD([{'params':base}, {'params':head}], lr=train_cfg.lr, momentum=train_cfg.momen, weight_decay=train_cfg.decay, nesterov=True)
     sw             = SummaryWriter(train_cfg.savepath)
 
-    #net = nn.DataParallel(net,device_ids=[0,1,2,3])
+    net = nn.DataParallel(net,device_ids=[0,1,2,3])
     net.cuda()
 
-    eva = True
+    eva = False
     if eva:
         evaluate(net,eval_dataloader)
 
     for epoch in range(train_cfg.epochs):
-        log_stream.write('='*30+'Epoch: '+str(epoch)+'='*30+'\n')
+        log_stream.write('='*30+'Epoch: '+str(epoch+1)+'='*30+'\n')
         optimizer.param_groups[0]['lr'] = (1-abs((epoch+1)/(train_cfg.epochs+1)*2-1))*train_cfg.lr*0.1
         optimizer.param_groups[1]['lr'] = (1-abs((epoch+1)/(train_cfg.epochs+1)*2-1))*train_cfg.lr
 
@@ -110,18 +110,15 @@ def main(Dataset,Network):
 def evaluate(net,loader):
     mae = cal_mae()
 
+    net.eval()
+
     with torch.no_grad():
         for image, mask, shape, name in loader:
-            print('---image---',image.shape)
             image = image.cuda().float()
             out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
             out = out2u
-            print('-----out----',out.shape)
             pred = (torch.sigmoid(out[0, 0])).cpu().numpy()
 
-            if pred.size() != mask.size():
-                x,y = pred.size
-                mask = mask.resize(x,y)
             mask = np.asarray(mask,np.float32)
             mask /= (mask.max()+1e-8)
             

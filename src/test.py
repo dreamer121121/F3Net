@@ -59,6 +59,9 @@ class Test(object):
             cnt = 1
             total = datetime.datetime(1999,1,1)
             for image, mask, shape, name in self.loader:
+                print(np.where(mask>0.5))
+                import sys
+                sys.exit(0)
                 #image.shape (1,3,352,352)
                 #shape: init img shape ,which is for pre_mask to match the size of init img
 
@@ -78,7 +81,7 @@ class Test(object):
 
 if __name__=='__main__':
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
-     for path in ['../data/HKU-IS']:
+     for path in ['../data/DUTS']:
         print("path:",path)
         t = Test(dataset, F3Net, path)
         t.save()
