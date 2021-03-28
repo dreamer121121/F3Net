@@ -103,7 +103,7 @@ def main(Dataset,Network):
                 'best_mae':best_mae,
             }, is_best,epoch,train_cfg)
 
-            log_stream.write('Valid MAE: {:.4f}'.format(mae))
+            log_stream.write('Valid MAE: {:.4f} \n'.format(mae))
             log_stream.flush()
 
 
