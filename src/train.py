@@ -109,19 +109,20 @@ def main(Dataset,Network):
 
 def evaluate(net,loader):
     mae = cal_mae()
+    net.eval()
 
     with torch.no_grad():
         for image, mask, shape, name in loader:
-            print('---image---',image.shape)
+            #print('---image---',image.shape)
             image = image.cuda().float()
             out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
             out = out2u
-            print('-----out----',out.shape)
+            #print('-----out----',out.shape)
             pred = (torch.sigmoid(out[0, 0])).cpu().numpy()
 
-            if pred.size() != mask.size():
-                x,y = pred.size
-                mask = mask.resize(x,y)
+            #if pred.size() != mask.size():
+            #    x,y = pred.size
+            #    mask = mask.resize(x,y)
             mask = np.asarray(mask,np.float32)
             mask /= (mask.max()+1e-8)
             
