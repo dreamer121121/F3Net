@@ -58,7 +58,7 @@ class ResNet(nn.Module):
         self.bn1      = nn.BatchNorm2d(64)
         self.layer1   = self.make_layer( 64, 3, stride=1, dilation=1)
         self.layer2   = self.make_layer(128, 4, stride=2, dilation=1)
-        self.layer3   = self.make_layer(256, 6, stride=2, dilation=1)
+        self.layer3   = self.make_layer(256, 23, stride=2, dilation=1)
         self.layer4   = self.make_layer(512, 3, stride=2, dilation=1)
 
     def make_layer(self, planes, blocks, stride, dilation):
