@@ -79,7 +79,7 @@ class ResNet(nn.Module):
         return out2, out3, out4, out5
 
     def initialize(self):
-        self.load_state_dict(torch.load('../res/resnet50-19c8e357.pth'), strict=False)
+        self.load_state_dict(torch.load('../res/resnet101-5d3b4d8f.pth'), strict=False)
 
 
 class CFM(nn.Module):
