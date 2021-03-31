@@ -83,7 +83,7 @@ def main(Dataset,Network):
         evaluate(net,eval_dataloader)
 
     for epoch in range(train_cfg.epochs):
-        log_stream.write('='*30+'Epoch: '+str(epoch)+'='*30+'\n')
+        log_stream.write('='*30+'Epoch: '+str(epoch+1)+'='*30+'\n')
         optimizer.param_groups[0]['lr'] = (1-abs((epoch+1)/(train_cfg.epochs+1)*2-1))*train_cfg.lr*0.1
         optimizer.param_groups[1]['lr'] = (1-abs((epoch+1)/(train_cfg.epochs+1)*2-1))*train_cfg.lr
 
@@ -140,7 +140,7 @@ def evaluate(net,loader):
     return Mae
 
 def train(net,optimizer,loader,sw,epoch,cfg):
-
+    net.train()
     for step, (image, mask) in enumerate(loader):
         image, mask = image.cuda().float(), mask.cuda().float()
         # print(image.shape) #(32,3,320,320)
