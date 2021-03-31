@@ -49,7 +49,7 @@ def structure_loss(pred, mask):
 
 def main(Dataset,Network):
     train_cfg = Dataset.Config(datapath='../data/DUTS/', savepath='./out', mode='train', batch=32,
-                            lr=0.05, momen=0.9, decay=5e-4, epochs=100)
+                            lr=0.05, momen=0.9, decay=5e-4, epochs=32)
     eval_cfg =  Dataset.Config(datapath='../data/DUTS/', mode='test',eval_freq=1)
 
     train_data = Dataset.Data(train_cfg)
@@ -103,7 +103,7 @@ def main(Dataset,Network):
                 'best_mae':best_mae,
             }, is_best,epoch,train_cfg)
 
-            log_stream.write('Valid MAE: {:.4f}'.format(mae))
+            log_stream.write('Valid MAE: {:.4f} \n'.format(mae))
             log_stream.flush()
 
 

@@ -23,7 +23,7 @@ from net  import F3Net
 class Test(object):
     def __init__(self, Dataset, Network, path):
         ## dataset
-        self.cfg    = Dataset.Config(datapath=path, snapshot='./out/model-100', mode='test')
+        self.cfg    = Dataset.Config(datapath=path, snapshot='./deploy/model-100', mode='test')
         self.data   = Dataset.Data(self.cfg)
         self.loader = DataLoader(self.data, batch_size=1, shuffle=False, num_workers=8)
         ## network
@@ -78,7 +78,7 @@ class Test(object):
 
 if __name__=='__main__':
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
-     for path in ['../data/HKU-IS']:
+     for path in ['../data/test_data_pm']:
         print("path:",path)
         t = Test(dataset, F3Net, path)
         t.save()
