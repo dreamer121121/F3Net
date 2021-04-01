@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from non_local_embedded_gaussian import NONLocalBlock2D
+
 
 def weight_init(module):
     for n, m in module.named_children():
@@ -66,6 +68,8 @@ class ResNet(nn.Module):
         layers        = [Bottleneck(self.inplanes, planes, stride, downsample, dilation=dilation)]
         self.inplanes = planes*4
         for _ in range(1, blocks):
+            if planes == 64 and blocks ==3 and _== 2:
+                NONLocalBlock2D(in_channels=planes)
             layers.append(Bottleneck(self.inplanes, planes, dilation=dilation))
         return nn.Sequential(*layers)
 
