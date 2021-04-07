@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from train import log_stream
+# from train import log_stream
 
 def weight_init(module):
     for n, m in module.named_children():
@@ -192,8 +192,7 @@ class F3Net(nn.Module):
     def initialize(self):
         if self.cfg.snapshot: #finetune
             if os.path.isfile(self.cfg.snapshot):
-                log_stream.write('=> loading checkpoint {} \n'.format(self.cfg.snapshot))
-                log_stream.flush()
+                print('=> loading checkpoint {} \n'.format(self.cfg.snapshot))
             checkpoints = torch.load(self.cfg.snapshot)['state_dict']
             fielter_checkpoints = dict()
             for k,v in checkpoints.items():
