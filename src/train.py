@@ -19,7 +19,7 @@ from tensorboardX import SummaryWriter
 import dataset
 from net  import F3Net
 import shutil
-
+import argparse
 
 from saliency_metrics import cal_mae,cal_fm,cal_sm,cal_em,cal_wfm
 
@@ -29,10 +29,24 @@ log_stream = open('train.log','a')
 global_step = 0
 best_mae = float('inf')
 
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--eval',
+                        action='store_true',
+                        help='whether to eval a model')
+    parser.add_argument('--resume',
+                        type=str,
+                        help='resume from pretrained model to fintune')
+    args = parser.parse_args()
+
+    return args
+
+
 def save_checkpoints(state, is_best, epoch,cfg):
-	torch.save(state, '%s/%s_%dcheckpoint.pth.tar' % (os.path.join(cfg.savepath), 'model',epoch))
-	if is_best:
-		shutil.copyfile('%s/%s_%dcheckpoint.pth.tar' % (os.path.join(cfg.savepath), 'model',epoch),'%s/%s_best.pth.tar' % (os.path.join(cfg.savepath), 'model'))
+    torch.save(state, '%s/%s_%dcheckpoint.pth.tar' % (os.path.join(cfg.savepath), 'model',epoch))
+    if is_best:
+        shutil.copyfile('%s/%s_%dcheckpoint.pth.tar' % (os.path.join(cfg.savepath), 'model',epoch),'%s/%s_best.pth.tar' % (os.path.join(cfg.savepath), 'model'))
 
 
 def structure_loss(pred, mask):
@@ -48,8 +62,14 @@ def structure_loss(pred, mask):
 
 
 def main(Dataset,Network):
-    train_cfg = Dataset.Config(datapath='../data/DUTS/', savepath='./out', mode='train', batch=32,
-                            lr=0.05, momen=0.9, decay=5e-4, epochs=32)
+
+    ##parse args
+    args = parse_args()
+
+    train_cfg = Dataset.Config(datapath='../data/DUTS/', savepath='./out', snapshot=args.resume, mode='train', batch=32,
+                            lr=0.05, momen=0.9, decay=5e-4, epochs=100)
+
+
     eval_cfg =  Dataset.Config(datapath='../data/DUTS/', mode='test',eval_freq=1)
 
     train_data = Dataset.Data(train_cfg)
@@ -61,7 +81,6 @@ def main(Dataset,Network):
 
     net    = Network(train_cfg)
     net.train(True)
-
 
     ## parameter
     base, head = [], []
@@ -78,8 +97,8 @@ def main(Dataset,Network):
     net = nn.DataParallel(net,device_ids=[0,1,2,3])
     net.cuda()
 
-    eva = False
-    if eva:
+
+    if args.eval:
         evaluate(net,eval_dataloader)
 
     for epoch in range(train_cfg.epochs):
@@ -111,18 +130,16 @@ def evaluate(net,loader):
     mae = cal_mae()
     net.eval()
 
+    net.eval()
+
     with torch.no_grad():
         for image, mask, shape, name in loader:
-            #print('---image---',image.shape)
+
             image = image.cuda().float()
             out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
             out = out2u
-            #print('-----out----',out.shape)
             pred = (torch.sigmoid(out[0, 0])).cpu().numpy()
 
-            #if pred.size() != mask.size():
-            #    x,y = pred.size
-            #    mask = mask.resize(x,y)
             mask = np.asarray(mask,np.float32)
             mask /= (mask.max()+1e-8)
             
