@@ -18,6 +18,7 @@ from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 import dataset
 from net  import F3Net
+from transform import *
 
 
 class Test(object):
@@ -30,6 +31,7 @@ class Test(object):
         self.net    = Network(self.cfg)
         self.net.train(False)
         self.net.cuda()
+        self.path = path
 
     def show(self):
         with torch.no_grad():
@@ -80,35 +82,68 @@ class Test(object):
                 cnt +=1
 
     def save_fig(self):
-        with torch.no_grad():
-            for image, mask, shape, name in self.loader:
-                #image.shape (1,3,352,352)
-                #shape: init img shape ,which is for pre_mask to match the size of init img
 
-                image = image.cuda().float()
-                out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
-                out   = out2u
-                pred  = (torch.sigmoid(out[0,0])*255).cpu().numpy()
-                pred = np.round(pred)
+        normalize = Normalize(mean=self.cfg.mean, std=self.cfg.std)
+        resize = Resize(352, 352)
+        totensor = ToTensor()
 
-                user_image = cv2.resize(image,shape)
+        file_list = os.listdir(self.path)
 
-                res = np.zeros(shape=(shape[0], pred.shape[1], 3))
-                res[:, :, 0] = pred[:, :]
-                res[:, :, 1] = pred[:, :]
-                res[:, :, 2] = pred[:, :]
+        for f in file_list:
+            # #image.shape (1,3,352,352)
+            # #shape: init img shape ,which is for pre_mask to match the size of init img
+            #
+            # image = image.cuda().float()
+            # out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
+            # out   = out2u
+            # pred  = (torch.sigmoid(out[0,0])*255).cpu().numpy()
+            # pred = np.round(pred)
+            name = f.split('.')[0]
+            user_image = cv2.imread(name)
+            input_data = user_image[:,:,::-1].astype(np.float32)
+            shape = [torch.tensor([int(input_data.shape[0])]),torch.tensor([int(input_data.shape[1])])]
 
-                outimg = np.where(res > 127, user_image, 255)
+            input_data = normalize(input_data)
+            input_data = resize(input_data)
+            input_data = totensor(input_data)
+            input_data = input_data[np.newaxis,:,:,:]
 
-                head  = '../eval/results/F3Net/'+ self.cfg.datapath.split('/')[-1]
-                if not os.path.exists(head):
-                    os.makedirs(head)
+            image = input_data.cuda().float()
 
-                cv2.imwrite(head+'/'+name[0]+'.png', outimg)
+            out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
+            out = out2u
+
+            pred = (torch.sigmoid(out[0, 0]) * 255).cpu().detach().numpy()
+
+            #
+            # input_image = np.zeros((AnimeObject.size[0], AnimeObject.size[1], 3), dtype=np.uint8)
+            # roi_x1 = int((AnimeObject.size[0] - user_image_pil_resized.size[0]) / 2)
+            # roi_x2 = int((AnimeObject.size[0] + user_image_pil_resized.size[0]) / 2)
+            # roi_y1 = int((AnimeObject.size[1] - user_image_pil_resized.size[1]) / 2)
+            # roi_y2 = int((AnimeObject.size[1] + user_image_pil_resized.size[1]) / 2)
+            # input_image[roi_y1:roi_y2, roi_x1:roi_x2, :] = np.array(user_image_pil_resized)
+            # cvimg = AnimeObject.style_transfer(input_image, (roi_x1, roi_x2, roi_y1, roi_y2))
+
+            #outimg1 = AnimeObject.apifilter(cvim
+
+            res = np.zeros(shape=(pred.shape[0],pred.shape[1],3))
+            pred = np.round(pred) #network output
+
+            res[:, :, 0] = pred[:, :]
+            res[:, :, 1] = pred[:, :]
+            res[:, :, 2] = pred[:, :]
+
+            outimg = np.where(res > 127, user_image, 255)
+
+            head  = '../eval/results/F3Net/'+ self.cfg.datapath.split('/')[-1]
+            if not os.path.exists(head):
+                os.makedirs(head)
+
+            cv2.imwrite(head+'/'+name[0]+'.png', outimg)
 
 if __name__=='__main__':
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
-     for path in ['../data/DUTS']:
+     for path in ['../data/test_data']:
         print("path:",path)
         t = Test(dataset, F3Net, path)
         t.save()
