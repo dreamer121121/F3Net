@@ -139,11 +139,11 @@ class Test(object):
 
             outimg = np.where(res > 127, user_image, 255)
 
-            head  = '../eval/result/F3Net/'+ self.cfg.datapath.split('/')[-1]
+            head  = '../eval/results/F3Net/'+ self.cfg.datapath.split('/')[-1]
             if not os.path.exists(head):
                 os.makedirs(head)
 
-            cv2.imwrite(head+'/'+name[0]+'.png', outimg)
+            cv2.imwrite(head+'/'+name+'.png', outimg)
 
 if __name__=='__main__':
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
