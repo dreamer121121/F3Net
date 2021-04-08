@@ -87,9 +87,13 @@ class Test(object):
         resize = Resize(352, 352)
         totensor = ToTensor()
 
-        file_list = os.listdir(self.path+'/image')
+        fr = open(self.path+'test.txt','r')
 
-        for f in file_list:
+        file_list = fr.readlines()
+
+        fr.close()
+
+        for name in file_list:
             # #image.shape (1,3,352,352)
             # #shape: init img shape ,which is for pre_mask to match the size of init img
             #
@@ -98,7 +102,6 @@ class Test(object):
             # out   = out2u
             # pred  = (torch.sigmoid(out[0,0])*255).cpu().numpy()
             # pred = np.round(pred)
-            name = f.split('.')[0]
             user_image = cv2.imread(path+'/image/'+name+'.jpg')
             input_data = user_image[:,:,::-1].astype(np.float32)
             shape = [torch.tensor([int(input_data.shape[0])]),torch.tensor([int(input_data.shape[1])])]
@@ -143,7 +146,7 @@ class Test(object):
 
 if __name__=='__main__':
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
-     for path in ['../data/test_data']:
+     for path in ['../data/person_test']:
         print("path:",path)
         t = Test(dataset, F3Net, path)
         t.save_fig()
