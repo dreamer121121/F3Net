@@ -87,7 +87,7 @@ class Test(object):
         resize = Resize(352, 352)
         totensor = ToTensor()
 
-        fr = open(self.path+'test.txt','r')
+        fr = open(self.path+'/test.txt','r')
 
         file_list = fr.readlines()
 
@@ -102,6 +102,7 @@ class Test(object):
             # out   = out2u
             # pred  = (torch.sigmoid(out[0,0])*255).cpu().numpy()
             # pred = np.round(pred)
+            name = name.replace('\n','')
             user_image = cv2.imread(path+'/image/'+name+'.jpg')
             input_data = user_image[:,:,::-1].astype(np.float32)
             shape = [torch.tensor([int(input_data.shape[0])]),torch.tensor([int(input_data.shape[1])])]
