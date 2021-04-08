@@ -94,14 +94,7 @@ class Test(object):
         fr.close()
 
         for name in file_list:
-            # #image.shape (1,3,352,352)
-            # #shape: init img shape ,which is for pre_mask to match the size of init img
-            #
-            # image = image.cuda().float()
-            # out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
-            # out   = out2u
-            # pred  = (torch.sigmoid(out[0,0])*255).cpu().numpy()
-            # pred = np.round(pred)
+
             name = name.replace('\n','')
             user_image = cv2.imread(path+'/image/'+name+'.jpg')
             input_data = user_image[:,:,::-1].astype(np.float32)
@@ -119,16 +112,6 @@ class Test(object):
 
             pred = (torch.sigmoid(out[0, 0]) * 255).cpu().detach().numpy()
 
-            #
-            # input_image = np.zeros((AnimeObject.size[0], AnimeObject.size[1], 3), dtype=np.uint8)
-            # roi_x1 = int((AnimeObject.size[0] - user_image_pil_resized.size[0]) / 2)
-            # roi_x2 = int((AnimeObject.size[0] + user_image_pil_resized.size[0]) / 2)
-            # roi_y1 = int((AnimeObject.size[1] - user_image_pil_resized.size[1]) / 2)
-            # roi_y2 = int((AnimeObject.size[1] + user_image_pil_resized.size[1]) / 2)
-            # input_image[roi_y1:roi_y2, roi_x1:roi_x2, :] = np.array(user_image_pil_resized)
-            # cvimg = AnimeObject.style_transfer(input_image, (roi_x1, roi_x2, roi_y1, roi_y2))
-
-            #outimg1 = AnimeObject.apifilter(cvim
 
             res = np.zeros(shape=(pred.shape[0],pred.shape[1],3))
             pred = np.round(pred) #network output
@@ -138,6 +121,17 @@ class Test(object):
             res[:, :, 2] = pred[:, :]
 
             outimg = np.where(res > 127, user_image, 255)
+
+            alpha = np.zeros((res.shape[0], res.shape[1])).astype(int)
+
+            for w in range(input_data.shape[0]):
+                for h in range(input_data.shape[1]):
+                    if all(res[w][h] == [0, 0, 0]):
+                        alpha[w][h] = 0
+                    else:
+                        alpha[w][h] = 255  # 看看能否优化速度
+
+            outimg = np.dstack([outimg, alpha])
 
             head  = '../eval/result/F3Net/'+ self.cfg.datapath.split('/')[-1]
             if not os.path.exists(head):
