@@ -22,6 +22,7 @@ import shutil
 import argparse
 
 from saliency_metrics import cal_mae,cal_fm,cal_sm,cal_em,cal_wfm
+from ssim import SSIM
 
 
 log_stream = open('train.log','a')
@@ -29,6 +30,7 @@ log_stream = open('train.log','a')
 global_step = 0
 best_mae = float('inf')
 
+ssim_loss = SSIM(window_size=11,size_average=True)
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -58,7 +60,11 @@ def structure_loss(pred, mask):
     inter = ((pred*mask)*weit).sum(dim=(2,3))
     union = ((pred+mask)*weit).sum(dim=(2,3))
     wiou  = 1-(inter+1)/(union-inter+1)
-    return (wbce+wiou).mean()
+
+    #add ssim loss to refine boundary
+    ssim_out = 1-ssim_loss(pred,mask)
+
+    return (wbce+wiou+ssim_out).mean()
 
 
 def main(Dataset,Network):
@@ -155,6 +161,7 @@ def evaluate(net,loader):
         Mae = mae.show()
 
     return Mae
+
 
 def train(net,optimizer,loader,sw,epoch,cfg):
     net.train()

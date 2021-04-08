@@ -10,6 +10,7 @@ import torch.nn.functional as F
 
 # from train import log_stream
 
+
 def weight_init(module):
     for n, m in module.named_children():
         print('initialize: '+n)
@@ -187,7 +188,6 @@ class F3Net(nn.Module):
         out4h = F.interpolate(self.linearr4(out4h), size=shape, mode='bilinear')
         out5h = F.interpolate(self.linearr5(out5v), size=shape, mode='bilinear')
         return pred1, pred2, out2h, out3h, out4h, out5h
-
 
     def initialize(self):
         if self.cfg.snapshot: #finetune
