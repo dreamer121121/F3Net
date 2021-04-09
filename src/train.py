@@ -57,7 +57,7 @@ def main(Dataset,Network):
     eval_data = Dataset.Data(eval_cfg)
 
     train_dataloader = DataLoader(train_data,collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True, num_workers=16)
-    eval_dataloader =  DataLoader(eval_data, batch_size=1, shuffle=False, num_workers=16)
+    eval_dataloader =  DataLoader(eval_data, batch_size=32, shuffle=False, num_workers=16)
 
     net    = Network(train_cfg)
     net.train(True)
