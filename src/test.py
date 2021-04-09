@@ -24,7 +24,7 @@ from transform import *
 class Test(object):
     def __init__(self, Dataset, Network, path):
         ## dataset
-        self.cfg    = Dataset.Config(datapath=path, snapshot='./out_res100/model_best.pth.tar', mode='test')
+        self.cfg    = Dataset.Config(datapath=path, snapshot='./out/model_best.pth.tar', mode='test')
         self.data   = Dataset.Data(self.cfg)
         self.loader = DataLoader(self.data, batch_size=1, shuffle=False, num_workers=8)
         ## network
@@ -61,9 +61,6 @@ class Test(object):
             cnt = 1
             total = datetime.datetime(1999,1,1)
             for image, mask, shape, name in self.loader:
-                print(np.where(mask>0.5))
-                import sys
-                sys.exit(0)
                 #image.shape (1,3,352,352)
                 #shape: init img shape ,which is for pre_mask to match the size of init img
 
@@ -113,20 +110,20 @@ class Test(object):
             pred = (torch.sigmoid(out[0, 0]) * 255).cpu().detach().numpy()
 
 
-            res = np.zeros(shape=(pred.shape[0],pred.shape[1],3))
+            mask = np.zeros(shape=(pred.shape[0],pred.shape[1],3))
             pred = np.round(pred) #network output
 
-            res[:, :, 0] = pred[:, :]
-            res[:, :, 1] = pred[:, :]
-            res[:, :, 2] = pred[:, :]
+            mask[:, :, 0] = pred[:, :]
+            mask[:, :, 1] = pred[:, :]
+            mask[:, :, 2] = pred[:, :]
 
-            outimg = np.where(res > 127, user_image, 255)
+            outimg = np.where(mask > 127, user_image, 0)
 
-            alpha = np.zeros((res.shape[0], res.shape[1])).astype(int)
+            alpha = np.zeros((outimg.shape[0], outimg.shape[1])).astype(int)
 
-            for w in range(input_data.shape[0]):
-                for h in range(input_data.shape[1]):
-                    if all(res[w][h] == [0, 0, 0]):
+            for w in range(outimg.shape[0]):
+                for h in range(outimg.shape[1]):
+                    if all(outimg[w][h] == [0, 0, 0]):
                         alpha[w][h] = 0
                     else:
                         alpha[w][h] = 255  # 看看能否优化速度
@@ -142,8 +139,8 @@ class Test(object):
 
 if __name__=='__main__':
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
-     for path in ['../data/person_test']:
+     for path in ['../data/allbody_base']:
         print("path:",path)
         t = Test(dataset, F3Net, path)
-        t.save_fig()
+        t.save()
         # t.show()
