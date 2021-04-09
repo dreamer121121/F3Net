@@ -69,7 +69,7 @@ class ResNet(nn.Module):
         self.inplanes = planes*4
         for _ in range(1, blocks):
             if planes == 64 and blocks ==3 and _== 2:
-                NONLocalBlock2D(in_channels=planes)
+                layers.append(NONLocalBlock2D(in_channels=planes*4))
             layers.append(Bottleneck(self.inplanes, planes, dilation=dilation))
         return nn.Sequential(*layers)
 
