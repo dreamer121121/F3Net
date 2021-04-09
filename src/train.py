@@ -25,7 +25,7 @@ from saliency_metrics import cal_mae,cal_fm,cal_sm,cal_em,cal_wfm
 from ssim import SSIM
 
 
-log_stream = open('train.log','a')
+log_stream = open('train_ssim.log','a')
 
 global_step = 0
 best_mae = float('inf')
@@ -64,6 +64,10 @@ def structure_loss(pred, mask):
     #add ssim loss to refine boundary
     ssim_out = 1-ssim_loss(pred,mask)
 
+    print('---ssim_loss----',ssim_out)
+    import sys
+    sys.exit(0)
+
     return (wbce+wiou+ssim_out).mean()
 
 
@@ -72,7 +76,7 @@ def main(Dataset,Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../data/DUTS/', savepath='./out', snapshot=args.resume, mode='train', batch=32,
+    train_cfg = Dataset.Config(datapath='../data/DUTS/', savepath='./out_ssmi', snapshot=args.resume, mode='train', batch=32,
                             lr=0.05, momen=0.9, decay=5e-4, epochs=100)
 
 
