@@ -23,14 +23,16 @@ import argparse
 
 from saliency_metrics import cal_mae,cal_fm,cal_sm,cal_em,cal_wfm
 from ssim import SSIM
-
-
+from iou import IOU
 log_stream = open('train_ssim.log','a')
 
 global_step = 0
 best_mae = float('inf')
 
+bce_loss = nn.BCELoss(size_average=True)
 ssim_loss = SSIM(window_size=11,size_average=True)
+iou_loss = IOU(size_average=True)
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -52,23 +54,13 @@ def save_checkpoints(state, is_best, epoch,cfg):
 
 
 def structure_loss(pred, mask):
-    weit  = 1+5*torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15)-mask)
-    wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
-    wbce  = (weit*wbce).sum(dim=(2,3))/weit.sum(dim=(2,3))
+    bce_out = bce_loss(pred, mask)
+    ssim_out = 1 - ssim_loss(pred, mask)
+    iou_out = iou_loss(pred, mask)
 
-    pred  = torch.sigmoid(pred)
-    inter = ((pred*mask)*weit).sum(dim=(2,3))
-    union = ((pred+mask)*weit).sum(dim=(2,3))
-    wiou  = 1-(inter+1)/(union-inter+1)
+    loss = bce_out + ssim_out + iou_out
 
-    #add ssim loss to refine boundary
-    ssim_out = 1-ssim_loss(pred,mask)
-
-    print('---ssim_loss----',ssim_out)
-    import sys
-    sys.exit(0)
-
-    return (wbce+wiou+ssim_out).mean()
+    return loss
 
 
 def main(Dataset,Network):
