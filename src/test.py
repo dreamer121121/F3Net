@@ -135,22 +135,8 @@ class Test(object):
 
             outimg = np.dstack([outimg, alpha])
 
-<<<<<<< HEAD
-            outimg = np.where(res > 127, user_image, 0)
-
-            alpha = np.zeros((outimg.shape[0], outimg.shape[1])).astype(int)
-
-            for w in range(input_data.shape[0]):
-                for h in range(input_data.shape[1]):
-                    if all(res[w][h] == [0, 0, 0]):
-                        alpha[w][h] = 0
-                    else:
-                        alpha[w][h] = 255  # 看看能否优化速度
-
-            outimg = np.dstack([outimg, alpha])
-=======
             head  = '../eval/result/F3Net/'+ self.cfg.datapath.split('/')[-1]
->>>>>>> resnet101
+
 
             if not os.path.exists(head):
                 os.makedirs(head)
