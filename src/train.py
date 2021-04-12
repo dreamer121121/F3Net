@@ -20,6 +20,7 @@ import dataset
 from net  import F3Net
 import shutil
 import argparse
+import cv2
 
 from saliency_metrics import cal_mae,cal_fm,cal_sm,cal_em,cal_wfm
 
@@ -58,7 +59,16 @@ def structure_loss(pred, mask):
     inter = ((pred*mask)*weit).sum(dim=(2,3))
     union = ((pred+mask)*weit).sum(dim=(2,3))
     wiou  = 1-(inter+1)/(union-inter+1)
-    return (wbce+wiou).mean()
+
+    #add cortor loss
+    d_y = cv2.erode(mask,kernel=(5,5),iterations=1)
+    e_y = cv2.dilate(mask,kernel=(5,5),iterations=1)
+    L = torch.ones(mask.shape)
+    m_c = cv2.GaussianBlur(5*(d_y-e_y),(5,5),0)+L
+    bce = F.binary_cross_entropy_with_logits(pred,mask,reduce='none')
+    cortor_loss = m_c*bce
+
+    return (wbce+wiou+cortor_loss).mean()
 
 
 def main(Dataset,Network):
