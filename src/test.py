@@ -24,7 +24,7 @@ from transform import *
 class Test(object):
     def __init__(self, Dataset, Network, path):
         ## dataset
-        self.cfg    = Dataset.Config(datapath=path, snapshot='./out_res100/model_best.pth.tar', mode='test')
+        self.cfg    = Dataset.Config(datapath=path, snapshot='./out_ssmi/model_best.pth.tar', mode='test')
         self.data   = Dataset.Data(self.cfg)
         self.loader = DataLoader(self.data, batch_size=1, shuffle=False, num_workers=8)
         ## network
@@ -94,8 +94,9 @@ class Test(object):
         fr.close()
 
         for name in file_list:
+
             name = name.replace('\n','')
-            user_image = cv2.imread(path+'/image/'+name+'.jpg')
+            user_image = cv2.imread(self.path+'/image/'+name+'.jpg')
             input_data = user_image[:,:,::-1].astype(np.float32)
             shape = [torch.tensor([int(input_data.shape[0])]),torch.tensor([int(input_data.shape[1])])]
 
@@ -111,13 +112,30 @@ class Test(object):
 
             pred = (torch.sigmoid(out[0, 0]) * 255).cpu().detach().numpy()
 
-            res = np.zeros(shape=(pred.shape[0],pred.shape[1],3))
+
+
+            mask = np.zeros(shape=(pred.shape[0],pred.shape[1],3))
+
             pred = np.round(pred) #network output
 
-            res[:, :, 0] = pred[:, :]
-            res[:, :, 1] = pred[:, :]
-            res[:, :, 2] = pred[:, :]
+            mask[:, :, 0] = pred[:, :]
+            mask[:, :, 1] = pred[:, :]
+            mask[:, :, 2] = pred[:, :]
 
+            outimg = np.where(mask > 127, user_image, 0)
+
+            alpha = np.zeros((outimg.shape[0], outimg.shape[1])).astype(int)
+
+            for w in range(outimg.shape[0]):
+                for h in range(outimg.shape[1]):
+                    if all(outimg[w][h] == [0, 0, 0]):
+                        alpha[w][h] = 0
+                    else:
+                        alpha[w][h] = 255  # 看看能否优化速度
+
+            outimg = np.dstack([outimg, alpha])
+
+<<<<<<< HEAD
             outimg = np.where(res > 127, user_image, 0)
 
             alpha = np.zeros((outimg.shape[0], outimg.shape[1])).astype(int)
@@ -130,8 +148,10 @@ class Test(object):
                         alpha[w][h] = 255  # 看看能否优化速度
 
             outimg = np.dstack([outimg, alpha])
+=======
+            head  = '../eval/result/F3Net/'+ self.cfg.datapath.split('/')[-1]
+>>>>>>> resnet101
 
-            head  = '../eval/results/F3Net/'+ self.cfg.datapath.split('/')[-1]
             if not os.path.exists(head):
                 os.makedirs(head)
 
@@ -139,8 +159,20 @@ class Test(object):
 
 if __name__=='__main__':
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
-     for path in ['../data/person_test']:
-        print("path:",path)
-        t = Test(dataset, F3Net, path)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mode',
+                        type=str,
+                        default='mask')
+    parser.add_argument('--dataset',
+                        type=str,
+                        )
+    args = parser.parse_args()
+    # for path in ['../data/allbody_base']:
+    #     print("path:",path)
+    t = Test(dataset, F3Net, args.dataset)
+    if args.mode == 'mask':
+        t.save()
+    elif args.mode == 'fig':
         t.save_fig()
-        # t.show()
+    # t.show()
