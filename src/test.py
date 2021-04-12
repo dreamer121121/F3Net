@@ -24,7 +24,7 @@ from transform import *
 class Test(object):
     def __init__(self, Dataset, Network, path):
         ## dataset
-        self.cfg    = Dataset.Config(datapath=path, snapshot='./out_res100/model_best.pth.tar', mode='test')
+        self.cfg    = Dataset.Config(datapath=path, snapshot='./out_ssmi/model_best.pth.tar', mode='test')
         self.data   = Dataset.Data(self.cfg)
         self.loader = DataLoader(self.data, batch_size=1, shuffle=False, num_workers=8)
         ## network
@@ -96,7 +96,7 @@ class Test(object):
         for name in file_list:
 
             name = name.replace('\n','')
-            user_image = cv2.imread(path+'/image/'+name+'.jpg')
+            user_image = cv2.imread(self.path+'/image/'+name+'.jpg')
             input_data = user_image[:,:,::-1].astype(np.float32)
             shape = [torch.tensor([int(input_data.shape[0])]),torch.tensor([int(input_data.shape[1])])]
 
@@ -142,8 +142,20 @@ class Test(object):
 
 if __name__=='__main__':
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
-     for path in ['../data/person_test']:
-        print("path:",path)
-        t = Test(dataset, F3Net, path)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mode',
+                        type=str,
+                        default='mask')
+    parser.add_argument('--dataset',
+                        type=str,
+                        )
+    args = parser.parse_args()
+    # for path in ['../data/allbody_base']:
+    #     print("path:",path)
+    t = Test(dataset, F3Net, args.dataset)
+    if args.mode == 'mask':
+        t.save()
+    elif args.mode == 'fig':
         t.save_fig()
-        # t.show()
+    # t.show()
