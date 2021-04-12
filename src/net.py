@@ -34,13 +34,14 @@ def weight_init(module):
 
 
 class Bottleneck(nn.Module):
-    def __init__(self, inplanes, planes, stride=1, downsample=None, dilation=1):
+    def __init__(self, inplanes, planes, stride=1, downsample=None, groups=1, base_width=64, dilation=1):
         super(Bottleneck, self).__init__()
-        self.conv1      = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
-        self.bn1        = nn.BatchNorm2d(planes)
-        self.conv2      = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=(3*dilation-1)//2, bias=False, dilation=dilation)
-        self.bn2        = nn.BatchNorm2d(planes)
-        self.conv3      = nn.Conv2d(planes, planes*4, kernel_size=1, bias=False)
+        width = int(planes * (base_width / 64.)) * groups
+        self.conv1      = nn.Conv2d(inplanes, width, kernel_size=1, bias=False)
+        self.bn1        = nn.BatchNorm2d(width)
+        self.conv2      = nn.Conv2d(width, width, kernel_size=3, stride=stride, padding=(3*dilation-1)//2, bias=False, dilation=dilation)
+        self.bn2        = nn.BatchNorm2d(width)
+        self.conv3      = nn.Conv2d(width, planes*4, kernel_size=1, bias=False)
         self.bn3        = nn.BatchNorm2d(planes*4)
         self.downsample = downsample
 
@@ -54,8 +55,11 @@ class Bottleneck(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self):
+    def __init__(self,groups=32,width_per_group=8):
         super(ResNet, self).__init__()
+        self.groups = groups
+        self.base_width = width_per_group
+
         self.inplanes = 64
         self.conv1    = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1      = nn.BatchNorm2d(64)
@@ -66,10 +70,10 @@ class ResNet(nn.Module):
 
     def make_layer(self, planes, blocks, stride, dilation):
         downsample    = nn.Sequential(nn.Conv2d(self.inplanes, planes*4, kernel_size=1, stride=stride, bias=False), nn.BatchNorm2d(planes*4))
-        layers        = [Bottleneck(self.inplanes, planes, stride, downsample, dilation=dilation)]
+        layers        = [Bottleneck(self.inplanes, planes, stride, downsample, self.groups,self.base_width,dilation=dilation)]
         self.inplanes = planes*4
         for _ in range(1, blocks):
-            layers.append(Bottleneck(self.inplanes, planes, dilation=dilation))
+            layers.append(Bottleneck(self.inplanes, planes, groups=self.groups,base_width=self.base_width,dilation=dilation))
         return nn.Sequential(*layers)
 
     def forward(self, x):
