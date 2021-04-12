@@ -67,7 +67,7 @@ def main(Dataset,Network):
     args = parse_args()
 
     train_cfg = Dataset.Config(datapath='../data/DUTS/', savepath='./out', snapshot=args.resume, mode='train', batch=32,
-                            lr=0.05, momen=0.9, decay=5e-4, epochs=100)
+                            lr=0.05, momen=0.9, decay=5e-4, epochs=32)
 
 
     eval_cfg =  Dataset.Config(datapath='../data/DUTS/', mode='test',eval_freq=1)
