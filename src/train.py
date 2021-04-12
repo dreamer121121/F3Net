@@ -50,6 +50,25 @@ def save_checkpoints(state, is_best, epoch,cfg):
         shutil.copyfile('%s/%s_%dcheckpoint.pth.tar' % (os.path.join(cfg.savepath), 'model',epoch),'%s/%s_best.pth.tar' % (os.path.join(cfg.savepath), 'model'))
 
 
+def tensor2im(image_tensor, imtype=np.uint8, normalize=True):
+    image_numpy = image_tensor.cpu().float().detach().numpy()
+    # print(image_numpy.shape)
+    # blank_image = np.zeros((image_tensor.shape[1],image_tensor.shape[2],image_tensor.shape[0]), np.uint8)
+
+    blank_image=image_numpy.reshape(image_tensor.shape[1],image_tensor.shape[2],image_tensor.shape[0])
+
+    return blank_image
+
+
+def im2tensor(image_numpy):
+
+    image_tensor = torch.Tensor(image_numpy)
+    (N,W,H,C) = image_tensor.size()
+    res = image_tensor.view((N,C,W,H))
+
+    return res
+
+
 def structure_loss(pred, mask):
     weit  = 1+5*torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15)-mask)
     wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
@@ -61,12 +80,27 @@ def structure_loss(pred, mask):
     wiou  = 1-(inter+1)/(union-inter+1)
 
     #add cortor loss
-    d_y = cv2.erode(mask,kernel=(5,5),iterations=1)
-    e_y = cv2.dilate(mask,kernel=(5,5),iterations=1)
-    L = torch.ones(mask.shape)
-    m_c = cv2.GaussianBlur(5*(d_y-e_y),(5,5),0)+L
-    bce = F.binary_cross_entropy_with_logits(pred,mask,reduce='none')
-    cortor_loss = m_c*bce
+    N,C,W,H = mask.shape
+    kernal = np.ones((5,5),np.uint8)
+    mc_matrix = np.zeros([N,W,H,C], dtype=np.float)
+    for i in range(N):
+        f_mask = mask[i,:,:,:]
+        f_mask_img = tensor2im(f_mask)
+        e_y = cv2.erode(f_mask_img,kernel=kernal,iterations=1)
+        d_y = cv2.dilate(f_mask_img,kernel=kernal,iterations=1)
+        m_c = cv2.GaussianBlur(5*(d_y-e_y),(5,5),0)
+        m_c = m_c[:,:,np.newaxis]
+        mc_matrix[i,:,:,:] = m_c[:,:,:]
+
+    L = np.ones((N,W,H,C))
+    M_C = mc_matrix - L
+    M_C = im2tensor(M_C).cuda()
+
+
+    bce = F.binary_cross_entropy_with_logits(pred,mask,reduction='none')
+
+    cortor_loss = M_C*bce
+
 
     return (wbce+wiou+cortor_loss).mean()
 
@@ -76,7 +110,7 @@ def main(Dataset,Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../data/DUTS/', savepath='./out', snapshot=args.resume, mode='train', batch=32,
+    train_cfg = Dataset.Config(datapath='../data/DUTS/', savepath='./out', snapshot=args.resume, mode='train', batch=1,
                             lr=0.05, momen=0.9, decay=5e-4, epochs=32)
 
     eval_cfg =  Dataset.Config(datapath='../data/DUTS/', mode='test',eval_freq=1)
