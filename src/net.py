@@ -39,7 +39,7 @@ class Bottleneck(nn.Module):
         width = int(planes * (base_width / 64.)) * groups
         self.conv1      = nn.Conv2d(inplanes, width, kernel_size=1, bias=False)
         self.bn1        = nn.BatchNorm2d(width)
-        self.conv2      = nn.Conv2d(width, width, kernel_size=3, stride=stride, padding=(3*dilation-1)//2, bias=False, dilation=dilation)
+        self.conv2      = nn.Conv2d(width, width, kernel_size=3, stride=stride, padding=(3*dilation-1)//2, bias=False, dilation=dilation,groups=groups)
         self.bn2        = nn.BatchNorm2d(width)
         self.conv3      = nn.Conv2d(width, planes*4, kernel_size=1, bias=False)
         self.bn3        = nn.BatchNorm2d(planes*4)
