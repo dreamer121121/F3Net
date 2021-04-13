@@ -100,7 +100,7 @@ def structure_loss(pred, mask):
 
     tmp = M_C*bce
 
-    cortor_loss = tmp.sum(dim=(2,3))/M_C.sum(dim=(2,3))
+    cortor_loss = tmp.sum(dim=(2,3))/M_C.sum(dim=(2,3))  #In paper,eqution 5(a little diffenence)
     #
     # print('--cortor loss---',cortor_loss.shape)
     # print('---wbce loss---',wbce.shape)
