@@ -24,7 +24,7 @@ from transform import *
 class Test(object):
     def __init__(self, Dataset, Network, path):
         ## dataset
-        self.cfg    = Dataset.Config(datapath=path, snapshot='./out_ssmi/model_best.pth.tar', mode='test')
+        self.cfg    = Dataset.Config(datapath=path, snapshot=args.model, mode='test')
         self.data   = Dataset.Data(self.cfg)
         self.loader = DataLoader(self.data, batch_size=1, shuffle=False, num_workers=8)
         ## network
@@ -61,9 +61,6 @@ class Test(object):
             cnt = 1
             total = datetime.datetime(1999,1,1)
             for image, mask, shape, name in self.loader:
-                print(np.where(mask>0.5))
-                import sys
-                sys.exit(0)
                 #image.shape (1,3,352,352)
                 #shape: init img shape ,which is for pre_mask to match the size of init img
 
@@ -150,10 +147,12 @@ if __name__=='__main__':
     parser.add_argument('--dataset',
                         type=str,
                         )
+    parser.add_argument('--model',
+                        type=str)
     args = parser.parse_args()
     # for path in ['../data/allbody_base']:
     #     print("path:",path)
-    t = Test(dataset, F3Net, args.dataset)
+    t = Test(dataset, F3Net, '../data/'+args.dataset)
     if args.mode == 'mask':
         t.save()
     elif args.mode == 'fig':
