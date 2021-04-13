@@ -142,8 +142,20 @@ class Test(object):
 
 if __name__=='__main__':
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
-     for path in ['../data/person_test']:
-        print("path:",path)
-        t = Test(dataset, F3Net, path)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mode',
+                        type=str,
+                        default='mask')
+    parser.add_argument('--dataset',
+                        type=str,
+                        )
+    args = parser.parse_args()
+    # for path in ['../data/allbody_base']:
+    #     print("path:",path)
+    t = Test(dataset, F3Net, args.dataset)
+    if args.mode == 'mask':
+        t.save()
+    elif args.mode == 'fig':
         t.save_fig()
-        # t.show()
+    # t.show()
