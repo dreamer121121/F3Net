@@ -113,20 +113,20 @@ class Test(object):
             pred = (torch.sigmoid(out[0, 0]) * 255).cpu().detach().numpy()
 
 
-            res = np.zeros(shape=(pred.shape[0],pred.shape[1],3))
+            mask = np.zeros(shape=(pred.shape[0],pred.shape[1],3))
             pred = np.round(pred) #network output
 
-            res[:, :, 0] = pred[:, :]
-            res[:, :, 1] = pred[:, :]
-            res[:, :, 2] = pred[:, :]
+            mask[:, :, 0] = pred[:, :]
+            mask[:, :, 1] = pred[:, :]
+            mask[:, :, 2] = pred[:, :]
 
-            outimg = np.where(res > 127, user_image, 255)
+            outimg = np.where(mask > 127, user_image, 0)
 
-            alpha = np.zeros((res.shape[0], res.shape[1])).astype(int)
+            alpha = np.zeros((outimg.shape[0], outimg.shape[1])).astype(int)
 
-            for w in range(input_data.shape[0]):
-                for h in range(input_data.shape[1]):
-                    if all(res[w][h] == [0, 0, 0]):
+            for w in range(outimg.shape[0]):
+                for h in range(outimg.shape[1]):
+                    if all(outimg[w][h] == [0, 0, 0]):
                         alpha[w][h] = 0
                     else:
                         alpha[w][h] = 255  # 看看能否优化速度
@@ -134,15 +134,28 @@ class Test(object):
             outimg = np.dstack([outimg, alpha])
 
             head  = '../eval/result/F3Net/'+ self.cfg.datapath.split('/')[-1]
+
             if not os.path.exists(head):
                 os.makedirs(head)
 
-            cv2.imwrite(head+'/'+name[0]+'.png', outimg)
+            cv2.imwrite(head+'/'+name+'.png', outimg)
 
 if __name__=='__main__':
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
-     for path in ['../data/person_test']:
-        print("path:",path)
-        t = Test(dataset, F3Net, path)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mode',
+                        type=str,
+                        default='mask')
+    parser.add_argument('--dataset',
+                        type=str,
+                        )
+    args = parser.parse_args()
+    # for path in ['../data/allbody_base']:
+    #     print("path:",path)
+    t = Test(dataset, F3Net, args.dataset)
+    if args.mode == 'mask':
+        t.save()
+    elif args.mode == 'fig':
         t.save_fig()
-        # t.show()
+    # t.show()
