@@ -93,13 +93,21 @@ def structure_loss(pred, mask):
         mc_matrix[i,:,:,:] = m_c[:,:,:]
 
     L = np.ones((N,W,H,C))
-    M_C = mc_matrix - L
+    M_C = mc_matrix + L
     M_C = im2tensor(M_C).cuda()
-
 
     bce = F.binary_cross_entropy_with_logits(pred,mask,reduction='none')
 
-    cortor_loss = M_C*bce
+    tmp = M_C*bce
+
+    cortor_loss = tmp.sum(dim=(2,3))/M_C.sum(dim=(2,3))
+    #
+    # print('--cortor loss---',cortor_loss.shape)
+    # print('---wbce loss---',wbce.shape)
+    # print('---wiou loss---',wiou.shape)
+    # print(cortor_loss)
+    # import sys
+    # sys.exit(0)
 
 
     return (wbce+wiou+cortor_loss).mean()
@@ -110,7 +118,7 @@ def main(Dataset,Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../data/DUTS/', savepath='./out', snapshot=args.resume, mode='train', batch=1,
+    train_cfg = Dataset.Config(datapath='../data/DUTS/', savepath='./out', snapshot=args.resume, mode='train', batch=32,
                             lr=0.05, momen=0.9, decay=5e-4, epochs=32)
 
     eval_cfg =  Dataset.Config(datapath='../data/DUTS/', mode='test',eval_freq=1)
