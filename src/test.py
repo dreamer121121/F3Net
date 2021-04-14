@@ -90,10 +90,15 @@ class Test(object):
 
         fr.close()
 
+        import datetime
+        cnt = 1
+        total = datetime.datetime(1999, 1, 1)
         for name in file_list:
 
             name = name.replace('\n','')
             user_image = cv2.imread(self.path+'/image/'+name+'.jpg')
+
+            start = datetime.datetime.now()
             input_data = user_image[:,:,::-1].astype(np.float32)
             shape = [torch.tensor([int(input_data.shape[0])]),torch.tensor([int(input_data.shape[1])])]
 
@@ -107,7 +112,7 @@ class Test(object):
             out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
             out = out2u
 
-            pred = (torch.sigmoid(out[0, 0]) * 255).cpu().detach().numpy()
+            pred = (torch.sigmoid(out[0, 0])).cpu().detach().numpy()
 
 
             mask = np.zeros(shape=(pred.shape[0],pred.shape[1],3))
@@ -117,18 +122,19 @@ class Test(object):
             mask[:, :, 1] = pred[:, :]
             mask[:, :, 2] = pred[:, :]
 
-            outimg = np.where(mask > 127, user_image, 0)
+            outimg = mask*user_image
 
-            alpha = np.zeros((outimg.shape[0], outimg.shape[1])).astype(int)
-
-            for w in range(outimg.shape[0]):
-                for h in range(outimg.shape[1]):
-                    if all(outimg[w][h] == [0, 0, 0]):
-                        alpha[w][h] = 0
-                    else:
-                        alpha[w][h] = 255  # 看看能否优化速度
-
-            outimg = np.dstack([outimg, alpha])
+            #
+            # alpha = np.zeros((outimg.shape[0], outimg.shape[1])).astype(int)
+            #
+            # for w in range(outimg.shape[0]):
+            #     for h in range(outimg.shape[1]):
+            #         if all(outimg[w][h] == [0, 0, 0]):
+            #             alpha[w][h] = 0
+            #         else:
+            #             alpha[w][h] = 255  # 看看能否优化速度
+            #
+            # outimg = np.dstack([outimg, alpha])
 
             head  = '../eval/result/F3Net/'+ self.cfg.datapath.split('/')[-1]
 
@@ -136,6 +142,9 @@ class Test(object):
                 os.makedirs(head)
 
             cv2.imwrite(head+'/'+name+'.png', outimg)
+            total += datetime.datetime.now() - start
+            print("inference time: ", (total - datetime.datetime(1999, 1, 1)) / cnt)
+            cnt += 1
 
 if __name__=='__main__':
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
