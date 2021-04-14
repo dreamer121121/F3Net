@@ -179,19 +179,19 @@ def train(net,optimizer,loader,sw,epoch,cfg):
     for step, (image, mask) in enumerate(loader):
         image, mask = image.cuda().float(), mask.cuda().float()
 
-        image,mask_a,mask_b = mixup_data(image,mask,use_cuda=)
+        image,mask_a,mask_b,lam = mixup_data(image,mask,alpha=1.0,use_cuda=True)
         # print(image.shape) #(32,3,320,320)
         # print(mask.shape) #(32,1,320,320)
         # import sys
         # sys.exit(0)
         out1u, out2u, out2r, out3r, out4r, out5r = net(image)
-        loss1u = structure_loss(out1u, mask)
-        loss2u = structure_loss(out2u, mask)
+        loss1u = mixup_criterion(structure_loss, out1u, mask_a, mask_b, lam)
+        loss2u = mixup_criterion(structure_loss, out2u, mask_a, mask_b, lam)
 
-        loss2r = structure_loss(out2r, mask)
-        loss3r = structure_loss(out3r, mask)
-        loss4r = structure_loss(out4r, mask)
-        loss5r = structure_loss(out5r, mask)
+        loss2r = mixup_criterion(structure_loss, out2r, mask_a, mask_b, lam)
+        loss3r = mixup_criterion(structure_loss, out3r, mask_a, mask_b, lam)
+        loss4r = mixup_criterion(structure_loss, out4r, mask_a, mask_b, lam)
+        loss5r = mixup_criterion(structure_loss, out5r, mask_a, mask_b, lam)
         loss   = (loss1u+loss2u)/2+loss2r/2+loss3r/4+loss4r/8+loss5r/16
 
         optimizer.zero_grad()
