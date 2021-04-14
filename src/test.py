@@ -78,6 +78,7 @@ class Test(object):
                 #print("inference time: ",(datetime.datetime.now()-start)/cnt)
                 cnt +=1
 
+    @torch.no_grad()
     def save_fig(self):
 
         normalize = Normalize(mean=self.cfg.mean, std=self.cfg.std)
@@ -108,25 +109,18 @@ class Test(object):
             input_data = input_data[np.newaxis,:,:,:]
 
             image = input_data.cuda().float()
+            user_image = torch.from_numpy(user_image).cuda().float()
+            alpha = torch.ones(user_image.size()[0],user_image.size()[1],1).cuda()*255
+            user_image = torch.cat((user_image,alpha),dim=2)
 
             out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
             out = out2u
 
-            pred = (torch.sigmoid(out[0, 0])).cpu().detach().numpy()
+            pred = (torch.sigmoid(out[0, 0]))
+            mask = pred.unsqueeze(dim=2)
 
+            outimg = (mask*user_image).detach().cpu().numpy()
 
-            mask = np.zeros(shape=(pred.shape[0],pred.shape[1],3))
-            pred = np.round(pred) #network output
-
-            mask[:, :, 0] = pred[:, :]
-            mask[:, :, 1] = pred[:, :]
-            mask[:, :, 2] = pred[:, :]
-
-            outimg = mask*user_image
-
-            #
-            # alpha = np.zeros((outimg.shape[0], outimg.shape[1])).astype(int)
-            #
             # for w in range(outimg.shape[0]):
             #     for h in range(outimg.shape[1]):
             #         if all(outimg[w][h] == [0, 0, 0]):
@@ -141,7 +135,7 @@ class Test(object):
             if not os.path.exists(head):
                 os.makedirs(head)
 
-            cv2.imwrite(head+'/'+name+'.png', outimg)
+            cv2.imwrite(head+'/'+name+'.png', np.round(outimg))
             total += datetime.datetime.now() - start
             print("inference time: ", (total - datetime.datetime(1999, 1, 1)) / cnt)
             cnt += 1
