@@ -61,9 +61,6 @@ class Test(object):
             cnt = 1
             total = datetime.datetime(1999,1,1)
             for image, mask, shape, name in self.loader:
-                print(np.where(mask>0.5))
-                import sys
-                sys.exit(0)
                 #image.shape (1,3,352,352)
                 #shape: init img shape ,which is for pre_mask to match the size of init img
 
@@ -96,7 +93,7 @@ class Test(object):
         for name in file_list:
 
             name = name.replace('\n','')
-            user_image = cv2.imread(path+'/image/'+name+'.jpg')
+            user_image = cv2.imread(self.path+'/image/'+name+'.jpg')
             input_data = user_image[:,:,::-1].astype(np.float32)
             shape = [torch.tensor([int(input_data.shape[0])]),torch.tensor([int(input_data.shape[1])])]
 
@@ -150,10 +147,12 @@ if __name__=='__main__':
     parser.add_argument('--dataset',
                         type=str,
                         )
+    parser.add_argument('--model',
+                        type=str)
     args = parser.parse_args()
     # for path in ['../data/allbody_base']:
     #     print("path:",path)
-    t = Test(dataset, F3Net, args.dataset)
+    t = Test(dataset, F3Net, '../data/'+args.dataset)
     if args.mode == 'mask':
         t.save()
     elif args.mode == 'fig':
