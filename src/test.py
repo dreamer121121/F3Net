@@ -63,7 +63,7 @@ class Test(object):
             cnt = 1
             total = datetime.datetime(1999,1,1)
 
-            for user_img,image, mask, shape, name in self.loader:
+            for image, mask, shape, name in self.loader:
                 #image.shape (1,3,352,352)
                 #shape: init img shape ,which is for pre_mask to match the size of init img
 
@@ -74,10 +74,10 @@ class Test(object):
                 print("inference time: ",(total-datetime.datetime(1999,1,1))/cnt)
                 out   = out2u
                 pred  = (torch.sigmoid(out[0,0])*255).cpu().numpy()
-
-                Q = None
-                if args.crf:
-                    Q = self.dense_crf(user_img.numpy().astype(np.uint8),pred)
+                #
+                # Q = None
+                # if args.crf:
+                #     Q = self.dense_crf(user_img.numpy().astype(np.uint8),pred)
                 head  = '../eval/maps_crf/F3Net/'+ self.cfg.datapath.split('/')[-1]
                 if not os.path.exists(head):
                     os.makedirs(head)
