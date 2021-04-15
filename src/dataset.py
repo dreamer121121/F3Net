@@ -104,7 +104,7 @@ class Data(Dataset):
         #print('-----img  name ----',self.cfg.datapath+'/image/'+name+'.jpg')
         image = cv2.imread(self.cfg.datapath+'/image/'+name+'.jpg')[:,:,::-1].astype(np.float32)
         mask  = cv2.imread(self.cfg.datapath+'/mask/' +name+'.png', 0).astype(np.float32)
-        init_img = image
+
 
 
         # if len(image.shape) != 3
@@ -124,7 +124,7 @@ class Data(Dataset):
             image, mask = self.normalize(image, mask)
             image, mask = self.resize(image, mask, self.cfg.mode)
             image, mask = self.totensor(image, mask)
-            return init_img,image, mask, shape, name
+            return image, mask, shape, name
 
     def collate(self, batch):
         size = [224, 256, 288, 320, 352][np.random.randint(0, 5)]
