@@ -20,6 +20,8 @@ import dataset
 from net  import F3Net
 from transform import *
 
+import pydensecrf.densecrf as dcrf
+
 
 class Test(object):
     def __init__(self, Dataset, Network, path):
@@ -60,7 +62,8 @@ class Test(object):
             #start = datetime.datetime.now()
             cnt = 1
             total = datetime.datetime(1999,1,1)
-            for image, mask, shape, name in self.loader:
+
+            for user_img,image, mask, shape, name in self.loader:
                 #image.shape (1,3,352,352)
                 #shape: init img shape ,which is for pre_mask to match the size of init img
 
@@ -70,11 +73,18 @@ class Test(object):
                 total += datetime.datetime.now()-start
                 print("inference time: ",(total-datetime.datetime(1999,1,1))/cnt)
                 out   = out2u
-                pred  = (torch.sigmoid(out[0,0])*255).cpu().numpy()
-                head  = '../eval/maps/F3Net/'+ self.cfg.datapath.split('/')[-1]
+                pred  = (torch.sigmoid(out[0,0])).unsqueeze(dim=2).expand(shape[0],shape[1],3).cpu().numpy()
+                print('--pred--',pred.shape)
+
+                Q = None
+                if args.crf:
+                    Q = self.dense_crf(user_img.numpy().astype(np.uint8),pred)
+                head  = '../eval/maps_crf/F3Net/'+ self.cfg.datapath.split('/')[-1]
                 if not os.path.exists(head):
                     os.makedirs(head)
-                cv2.imwrite(head+'/'+name[0]+'.png', np.round(pred))
+                cv2.imwrite(head+'/'+name[0]+'.png', np.round(Q*255))
+                # import sys
+                # sys.exit(0)
                 #print("inference time: ",(datetime.datetime.now()-start)/cnt)
                 cnt +=1
 
@@ -109,14 +119,22 @@ class Test(object):
             input_data = input_data[np.newaxis,:,:,:]
 
             image = input_data.cuda().float()
-            user_image = torch.from_numpy(user_image).cuda().float()
-            alpha = torch.ones(user_image.size()[0],user_image.size()[1],1).cuda()*255
-            user_image = torch.cat((user_image,alpha),dim=2)
+            # user_image = torch.from_numpy(user_image).cuda().float()
+            # alpha = torch.ones(user_image.size()[0],user_image.size()[1],1).cuda()*255
+            # user_image = torch.cat((user_image,alpha),dim=2)
+
 
             out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
             out = out2u
 
             pred = (torch.sigmoid(out[0, 0]))
+            if args.crf:
+                Q = self.dense_crf(user_image.astype(np.uint8), pred.cpu().numpy())
+                print('--Q--', Q)
+                cv2.imwrite('./crf_test.png',np.round(Q*255))
+                import sys
+                sys.exit(0)
+
             mask = pred.unsqueeze(dim=2)
 
             outimg = (mask*user_image).detach().cpu().numpy()
@@ -130,7 +148,7 @@ class Test(object):
             #
             # outimg = np.dstack([outimg, alpha])
 
-            head  = '../eval/result/F3Net/'+ self.cfg.datapath.split('/')[-1]
+            head  = '../eval/results/F3Net/'+ self.cfg.datapath.split('/')[-1]
 
             if not os.path.exists(head):
                 os.makedirs(head)
@@ -139,6 +157,31 @@ class Test(object):
             total += datetime.datetime.now() - start
             print("inference time: ", (total - datetime.datetime(1999, 1, 1)) / cnt)
             cnt += 1
+
+
+    def dense_crf(slef,img, output_probs):  # img为输入的图像，output_probs是经过网络预测后得到的结果
+        h = output_probs.shape[0]  # 高度
+        w = output_probs.shape[1]  # 宽度
+
+        output_probs = np.expand_dims(output_probs, 0)
+        output_probs = np.append(1 - output_probs, output_probs, axis=0)
+
+        d = dcrf.DenseCRF2D(w, h, 2)  # NLABELS=2两类标注，车和不是车
+        U = -np.log(output_probs)  # 得到一元势
+        U = U.reshape((2, -1))  # NLABELS=2两类标注
+        U = np.ascontiguousarray(U)  # 返回一个地址连续的数组
+        img = np.ascontiguousarray(img)
+
+        d.setUnaryEnergy(U)  # 设置一元势
+
+        img = img.squeeze()
+        d.addPairwiseGaussian(sxy=20, compat=3)  # 设置二元势中高斯情况的值
+        d.addPairwiseBilateral(sxy=30, srgb=20, rgbim=img, compat=10)  # 设置二元势众双边情况的值
+
+        Q = d.inference(5)  # 迭代5次推理
+        Q = np.argmax(np.array(Q), axis=0).reshape((h, w))  # 得列中最大值的索引结果
+
+        return Q
 
 if __name__=='__main__':
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
@@ -152,6 +195,8 @@ if __name__=='__main__':
                         )
     parser.add_argument('--model',
                         type=str)
+    parser.add_argument('--crf',
+                        action='store_true')
     args = parser.parse_args()
     # for path in ['../data/allbody_base']:
     #     print("path:",path)
