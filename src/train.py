@@ -39,6 +39,9 @@ def parse_args():
     parser.add_argument('--resume',
                         type=str,
                         help='resume from pretrained model to fintune')
+    parser.add_argument('--dataset',
+                        type=str,
+                        help='train dataset')
     args = parser.parse_args()
 
     return args
@@ -70,7 +73,7 @@ def im2tensor(image_numpy):
 
 
 def structure_loss(pred, mask):
-    weit  = 1+5*torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15)-mask)
+    #weit  = 1+5*torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15)-mask)
     # wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
     # wbce  = (weit*wbce).sum(dim=(2,3))/weit.sum(dim=(2,3))
     #
@@ -118,10 +121,10 @@ def main(Dataset,Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../data/DUTS/', savepath='./out', snapshot=args.resume, mode='train', batch=32,
+    train_cfg = Dataset.Config(datapath='../data/'+args.dataset, savepath='./out', snapshot=args.resume, mode='train', batch=32,
                             lr=0.05, momen=0.9, decay=5e-4, epochs=32)
 
-    eval_cfg =  Dataset.Config(datapath='../data/DUTS/', mode='test',eval_freq=1)
+    eval_cfg =  Dataset.Config(datapath='../data/'+args.dataset, mode='test',eval_freq=1)
 
     train_data = Dataset.Data(train_cfg)
 
