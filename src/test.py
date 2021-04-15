@@ -73,8 +73,7 @@ class Test(object):
                 total += datetime.datetime.now()-start
                 print("inference time: ",(total-datetime.datetime(1999,1,1))/cnt)
                 out   = out2u
-                pred  = (torch.sigmoid(out[0,0])).unsqueeze(dim=2).expand(shape[0],shape[1],3).cpu().numpy()
-                print('--pred--',pred.shape)
+                pred  = (torch.sigmoid(out[0,0])*255).cpu().numpy()
 
                 Q = None
                 if args.crf:
@@ -82,7 +81,7 @@ class Test(object):
                 head  = '../eval/maps_crf/F3Net/'+ self.cfg.datapath.split('/')[-1]
                 if not os.path.exists(head):
                     os.makedirs(head)
-                cv2.imwrite(head+'/'+name[0]+'.png', np.round(Q*255))
+                cv2.imwrite(head+'/'+name[0]+'.png', np.round(pred))
                 # import sys
                 # sys.exit(0)
                 #print("inference time: ",(datetime.datetime.now()-start)/cnt)
