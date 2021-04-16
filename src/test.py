@@ -78,7 +78,7 @@ class Test(object):
                 # Q = None
                 # if args.crf:
                 #     Q = self.dense_crf(user_img.numpy().astype(np.uint8),pred)
-                head  = '../eval/maps_crf/F3Net/'+ self.cfg.datapath.split('/')[-1]
+                head  = '../eval/maps/F3Net/'+ self.cfg.datapath.split('/')[-1]
                 if not os.path.exists(head):
                     os.makedirs(head)
                 cv2.imwrite(head+'/'+name[0]+'.png', np.round(pred))
