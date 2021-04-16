@@ -38,6 +38,9 @@ def parse_args():
     parser.add_argument('--resume',
                         type=str,
                         help='resume from pretrained model to fintune')
+    parser.add_argument('--dataset',
+                        type=str,
+                        help='dataset for training')
     args = parser.parse_args()
 
     return args
@@ -66,10 +69,10 @@ def main(Dataset,Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../data/DUTS/', savepath='./out', snapshot=args.resume, mode='train', batch=32,
+    train_cfg = Dataset.Config(datapath='../data/'+args.dataset, savepath='./out', snapshot=args.resume, mode='train', batch=32,
                             lr=0.05, momen=0.9, decay=5e-4, epochs=32)
 
-    eval_cfg =  Dataset.Config(datapath='../data/DUTS/', mode='test',eval_freq=1)
+    eval_cfg =  Dataset.Config(datapath='../data/'+args.dataset, mode='test',eval_freq=1)
 
     train_data = Dataset.Data(train_cfg)
 
