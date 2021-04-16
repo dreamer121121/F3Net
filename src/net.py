@@ -150,6 +150,7 @@ class Decoder(nn.Module):
     def initialize(self):
         weight_init(self)
 
+
 class Fusion(nn.Module):
     def __init__(self,num_decoder):
         super(Fusion, self).__init__()
@@ -204,7 +205,6 @@ class F3Net(nn.Module):
 
         pred2 = self.fusion(torch.cat((pred1,pred2),dim=1))
         return pred1, pred2, out2h, out3h, out4h, out5h
-
 
     def initialize(self):
         if self.cfg.snapshot: #finetune
