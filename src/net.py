@@ -150,6 +150,20 @@ class Decoder(nn.Module):
     def initialize(self):
         weight_init(self)
 
+class Fusion(nn.Module):
+    def __init__(self,num_decoder):
+        super(Fusion, self).__init__()
+        self.fu_conv1 = nn.Conv2d(in_channels=num_decoder,out_channels=64,kernel_size=3,stride=1,padding=1)
+        self.fu_conv2 = nn.Conv2d(in_channels=64,out_channels=64,kernel_size=1,stride=1,padding=0)
+        self.fu_conv3 = nn.Conv2d(in_channels=64,out_channels=1,kernel_size=1,stride=1,padding=0)
+
+    def forward(self, input):
+        out = self.fu_conv1(input)
+        out = self.fu_conv2(out)
+        out = self.fu_conv3(out)
+
+        return out
+
 
 class F3Net(nn.Module):
     def __init__(self, cfg):
@@ -170,6 +184,7 @@ class F3Net(nn.Module):
         self.linearr3 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
         self.linearr4 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
         self.linearr5 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
+        self.fusion = Fusion(2)
         self.initialize()
 
     def forward(self, x, shape=None):
@@ -186,6 +201,8 @@ class F3Net(nn.Module):
         out3h = F.interpolate(self.linearr3(out3h), size=shape, mode='bilinear')
         out4h = F.interpolate(self.linearr4(out4h), size=shape, mode='bilinear')
         out5h = F.interpolate(self.linearr5(out5v), size=shape, mode='bilinear')
+
+        pred2 = self.fusion(torch.cat((pred1,pred2),dim=1))
         return pred1, pred2, out2h, out3h, out4h, out5h
 
 
