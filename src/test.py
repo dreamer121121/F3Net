@@ -118,9 +118,9 @@ class Test(object):
             input_data = input_data[np.newaxis,:,:,:]
 
             image = input_data.cuda().float()
-            # user_image = torch.from_numpy(user_image).cuda().float()
-            # alpha = torch.ones(user_image.size()[0],user_image.size()[1],1).cuda()*255
-            # user_image = torch.cat((user_image,alpha),dim=2)
+            user_image = torch.from_numpy(user_image).cuda().float()
+            alpha = torch.ones(user_image.size()[0],user_image.size()[1],1).cuda()*255
+            user_image = torch.cat((user_image,alpha),dim=2)
 
 
             out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
