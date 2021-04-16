@@ -165,6 +165,9 @@ class Fusion(nn.Module):
 
         return out
 
+    def initialize(self):
+        weight_init(self)
+
 
 class F3Net(nn.Module):
     def __init__(self, cfg):
