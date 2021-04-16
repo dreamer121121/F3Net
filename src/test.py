@@ -127,12 +127,12 @@ class Test(object):
             out = out2u
 
             pred = (torch.sigmoid(out[0, 0]))
-            if args.crf:
-                Q = self.dense_crf(user_image.astype(np.uint8), pred.cpu().numpy())
-                print('--Q--', Q)
-                cv2.imwrite('./crf_test.png',np.round(Q*255))
-                import sys
-                sys.exit(0)
+            # if args.crf:
+            #     Q = self.dense_crf(user_image.astype(np.uint8), pred.cpu().numpy())
+            #     print('--Q--', Q)
+            #     cv2.imwrite('./crf_test.png',np.round(Q*255))
+            #     import sys
+            #     sys.exit(0)
 
             mask = pred.unsqueeze(dim=2)
 
