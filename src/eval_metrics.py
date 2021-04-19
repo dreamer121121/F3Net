@@ -9,7 +9,7 @@ dataset_path = '..' ##gt_path
 
 dataset_path_pre = '..'  ##pre_salmap_path
 
-test_datasets = ['DUTS']     ##test_datasets_name
+test_datasets = ['makeup']     ##test_datasets_name
 
 class eval_dataset:
     def __init__(self, image_root, gt_root):
