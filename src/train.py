@@ -41,6 +41,12 @@ def parse_args():
     parser.add_argument('--dataset',
                         type=str,
                         help='dataset used for train')
+    parser.add_argument('--batch_size',
+                       type=int,
+                       default=32)
+    parser.add_argument('--epochs',
+                        type=int,
+                        default=32)
     args = parser.parse_args()
 
     return args
@@ -69,8 +75,8 @@ def main(Dataset,Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../data/'+args.dataset, savepath='./out', snapshot=args.resume, mode='train', batch=64,
-                            lr=0.05, momen=0.9, decay=5e-4, epochs=32)
+    train_cfg = Dataset.Config(datapath='../data/'+args.dataset, savepath='./out', snapshot=args.resume, mode='train', batch=args.batch_size,
+                            lr=0.05, momen=0.9, decay=5e-4, epochs=args.epochs)
 
 
     eval_cfg =  Dataset.Config(datapath='../data/'+args.dataset, mode='test',eval_freq=1)
