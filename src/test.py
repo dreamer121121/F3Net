@@ -158,7 +158,6 @@ class Test(object):
             print("inference time: ", (total - datetime.datetime(1999, 1, 1)) / cnt)
             cnt += 1
 
-
     def dense_crf(slef,img, output_probs):  # img为输入的图像，output_probs是经过网络预测后得到的结果
         h = output_probs.shape[0]  # 高度
         w = output_probs.shape[1]  # 宽度
@@ -182,6 +181,7 @@ class Test(object):
         Q = np.argmax(np.array(Q), axis=0).reshape((h, w))  # 得列中最大值的索引结果
 
         return Q
+
 
 if __name__=='__main__':
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:

@@ -63,6 +63,7 @@ for dataset in test_datasets:
             res = res/255
         else:
             res = (res - res.min()) / (res.max() - res.min())
+        res,gt = res.cuda().float(),gt.cuda().float()
         mae.update(res, gt)
         sm.update(res,gt)
         fm.update(res, gt)
