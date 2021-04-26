@@ -3,6 +3,7 @@ import numpy as np
 from saliency_metrics import cal_mae,cal_fm,cal_sm,cal_em,cal_wfm
 from PIL import Image
 import torchvision.transforms as transforms
+import torch
 
 
 dataset_path = '..' ##gt_path
