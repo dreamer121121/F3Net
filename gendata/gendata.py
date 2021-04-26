@@ -24,32 +24,56 @@ def genmask(foreground,background,cor,name):
 
 
 def main():
-    f_short_side_size = 400
+    f_short_side_size = 600
     b_short_side_size = 800
 
     fg_list = os.listdir('./fgimgs')
     bg_list = os.listdir('./bgimgs')
 
     for fg in fg_list:
-        randx = np.random.randint(-50,50)
-        randy = np.random.randint(-50,50)
-        foreground = Image.open('./fgimgs/'+fg)
-        fg_name = fg.split('.')[0]
-        for bg in bg_list:
+        try:
+            randx = np.random.randint(-50,50)
+            randy = np.random.randint(-50,50)
+            foreground = Image.open('./fgimgs/'+fg)
+            fg_name = fg.split('.')[0]
+
+            # for bg in bg_list:
+            #     bg_name = bg.split('.')[0]
+            #     background = Image.open('./bgimgs/'+bg)
+            #
+            #     background = rescale(background,b_short_side_size)
+            #     foreground = rescale(foreground,f_short_side_size)
+            #
+            #     b_center = (background.size[0]//2,background.size[1]//2)
+            #     f_center = (foreground.size[0]//2,foreground.size[1]//2)
+            #     f_left = (b_center[0]-f_center[0]+randx,b_center[1]-f_center[1]+randy)
+            #
+            #     background.paste(foreground,f_left,foreground)
+            #     background.save('./pasted_img/img/p_'+fg_name+'_'+bg_name+'.jpg')
+            #
+            #     genmask(foreground,background,f_left,fg_name+'_'+bg_name)
+            #
+            bg = bg_list[np.random.randint(0,len(bg_list))]
+
             bg_name = bg.split('.')[0]
-            background = Image.open('./bgimgs/'+bg)
+            background = Image.open('./bgimgs/' + bg)
 
-            background = rescale(background,b_short_side_size)
-            foreground = rescale(foreground,f_short_side_size)
+            background = rescale(background, b_short_side_size)
+            foreground = rescale(foreground, f_short_side_size)
 
-            b_center = (background.size[0]//2,background.size[1]//2)
-            f_center = (foreground.size[0]//2,foreground.size[1]//2)
-            f_left = (b_center[0]-f_center[0]+randx,b_center[1]-f_center[1]+randy)
+            b_center = (background.size[0] // 2, background.size[1] // 2)
+            f_center = (foreground.size[0] // 2, foreground.size[1] // 2)
+            f_left = (b_center[0] - f_center[0] + randx, b_center[1] - f_center[1] + randy)
 
-            background.paste(foreground,f_left,foreground)
-            background.save('./pasted_img/img/p_'+fg_name+'_'+bg_name+'.jpg')
+            background.paste(foreground, f_left, foreground)
+            background.save('./pasted_img/img/p_' + fg_name + '_' + bg_name + '.jpg')
 
-            genmask(foreground,background,f_left,fg_name+'_'+bg_name)
+            print(foreground.size)
+            print(background.size)
+            genmask(foreground, background, f_left, fg_name + '_' + bg_name)
+        except:
+            pass
+
 
 if __name__ =='__main__':
     main()

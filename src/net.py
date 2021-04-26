@@ -193,13 +193,19 @@ class F3Net(nn.Module):
         if self.cfg.snapshot: #finetune
             if os.path.isfile(self.cfg.snapshot):
                 print('=> loading checkpoint {} \n'.format(self.cfg.snapshot))
-            checkpoints = torch.load(self.cfg.snapshot)['state_dict']
+            #checkpoints = torch.load(self.cfg.snapshot)['state_dict']
+            checkpoints = torch.load(self.cfg.snapshot)
             fielter_checkpoints = dict()
             for k,v in checkpoints.items():
                 if "module" in k:
                     fielter_checkpoints[k[7:]] = v
                 else:
                     fielter_checkpoints[k] = v
+            #print(fielter_checkpoints.keys())
+            #import sys
+            #sys.exit(0)
             self.load_state_dict(fielter_checkpoints)
+            import sys
+            sys.exit(0)
         else:
             weight_init(self)
