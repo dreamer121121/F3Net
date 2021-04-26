@@ -32,7 +32,7 @@ class Test(object):
         ## network
         self.net    = Network(self.cfg)
         self.net.train(False)
-        self.net.cuda()
+        self.net.to('cuda:1')
         self.path = path
 
     def show(self):
@@ -41,7 +41,7 @@ class Test(object):
                 print('image.shape: ',image.shape)
                 import sys
                 sys.exit(0)
-                image, mask = image.cuda().float(), mask.cuda().float()
+                image, mask = image.to('cuda:1').float(), mask.to('cuda:1').float()
                 out1u, out2u, out2r, out3r, out4r, out5r = self.net(image)
                 out = out2u
 
@@ -67,7 +67,7 @@ class Test(object):
                 #image.shape (1,3,352,352)
                 #shape: init img shape ,which is for pre_mask to match the size of init img
 
-                image = image.cuda().float()
+                image = image.to('cuda:1').float()
                 start = datetime.datetime.now()
                 out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
                 total += datetime.datetime.now()-start
@@ -117,9 +117,9 @@ class Test(object):
             input_data = totensor(input_data)
             input_data = input_data[np.newaxis,:,:,:]
 
-            image = input_data.cuda().float()
-            user_image = torch.from_numpy(user_image).cuda().float()
-            alpha = torch.ones(user_image.size()[0],user_image.size()[1],1).cuda()*255
+            image = input_data.to('cuda:1').float()
+            user_image = torch.from_numpy(user_image).to('cuda:1').float()
+            alpha = torch.ones(user_image.size()[0],user_image.size()[1],1).to('cuda:1')*255
             user_image = torch.cat((user_image,alpha),dim=2)
 
 
