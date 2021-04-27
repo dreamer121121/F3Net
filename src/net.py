@@ -10,6 +10,42 @@ import torch.nn.functional as F
 
 # from train import log_stream
 
+class PM(nn.Module):
+    def __init__(self,inc):
+        super(PM, self).__init__()
+        self.gamma = 1
+        self.gamma_ = 1
+        self.conv_Q = nn.Conv2d(in_channels=inc,out_channels=inc//8,kernel_size=1)
+        self.conv_K = nn.Conv2d(in_channels=inc,out_channels=inc//8,kernel_size=1)
+        self.conv_V = nn.Conv2d(in_channels=inc,out_channels=inc,kernel_size=1)
+
+        self.softmax = nn.Softmax(dim=0)
+        # self.conv = nn.Conv2d(in_channels=inc,out_channels=1,kernel_size=7,padding=3)
+
+
+    def forward(self,f):
+        (B,C,W,H) = f.size()
+        N = W*H
+        Q = f.view(B,C,N)
+        K = f.view(B,C,N)
+        V = f.view(B,C,N)
+
+        X = self.softmax(torch.matmul(Q,K.transpose(1,2)))
+
+        f_ = self.gamma*(torch.matmul(X,V)).view(B,C,W,H)+f
+
+        C_ = C//8
+        Q_=  self.conv_Q(f_).view(B,C_,N)
+        K_ = self.conv_K(f_).view(B,C_,N)
+        V_ = self.conv_V(f_).view(B,C,N)
+
+        X_ = self.softmax(torch.matmul(K_.transpose(1,2),Q_))
+        f__ = self.gamma_*torch.matmul(V_,X_).view(B,C,W,H)+f_
+        #
+        # l_map = self.conv(f__)
+
+        return f__
+
 def weight_init(module):
     for n, m in module.named_children():
         print('initialize: '+n)
@@ -170,11 +206,13 @@ class F3Net(nn.Module):
         self.linearr3 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
         self.linearr4 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
         self.linearr5 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
+
+        self.pm = PM(inc=64)
         self.initialize()
 
     def forward(self, x, shape=None):
         out2h, out3h, out4h, out5v        = self.bkbone(x)
-        out2h, out3h, out4h, out5v        = self.squeeze2(out2h), self.squeeze3(out3h), self.squeeze4(out4h), self.squeeze5(out5v)
+        out2h, out3h, out4h, out5v        = self.squeeze2(out2h), self.squeeze3(out3h), self.squeeze4(out4h), self.pm(self.squeeze5(out5v))
         out2h, out3h, out4h, out5v, pred1 = self.decoder1(out2h, out3h, out4h, out5v)
         out2h, out3h, out4h, out5v, pred2 = self.decoder2(out2h, out3h, out4h, out5v, pred1)
 
