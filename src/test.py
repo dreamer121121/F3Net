@@ -24,7 +24,7 @@ from transform import *
 class Test(object):
     def __init__(self, Dataset, Network, path):
         ## dataset
-        self.cfg    = Dataset.Config(datapath=path, snapshot='./out/model-100', mode='test')
+        self.cfg    = Dataset.Config(datapath=path, snapshot=args.model, mode='test')
         self.data   = Dataset.Data(self.cfg)
         self.loader = DataLoader(self.data, batch_size=1, shuffle=False, num_workers=8)
         ## network
@@ -78,6 +78,7 @@ class Test(object):
                 #print("inference time: ",(datetime.datetime.now()-start)/cnt)
                 cnt +=1
 
+    @torch.no_grad()
     def save_fig(self):
 
         normalize = Normalize(mean=self.cfg.mean, std=self.cfg.std)
@@ -90,10 +91,15 @@ class Test(object):
 
         fr.close()
 
+        import datetime
+        cnt = 1
+        total = datetime.datetime(1999, 1, 1)
         for name in file_list:
 
             name = name.replace('\n','')
             user_image = cv2.imread(self.path+'/image/'+name+'.jpg')
+
+            start = datetime.datetime.now()
             input_data = user_image[:,:,::-1].astype(np.float32)
             shape = [torch.tensor([int(input_data.shape[0])]),torch.tensor([int(input_data.shape[1])])]
 
@@ -103,39 +109,45 @@ class Test(object):
             input_data = input_data[np.newaxis,:,:,:]
 
             image = input_data.cuda().float()
+            user_image = torch.from_numpy(user_image).cuda().float()
+            alpha = torch.ones(user_image.size()[0],user_image.size()[1],1).cuda()*255
+            user_image = torch.cat((user_image,alpha),dim=2)
+
 
             out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
             out = out2u
 
-            pred = (torch.sigmoid(out[0, 0]) * 255).cpu().detach().numpy()
+            pred = (torch.sigmoid(out[0, 0]))
+            # if args.crf:
+            #     Q = self.dense_crf(user_image.astype(np.uint8), pred.cpu().numpy())
+            #     print('--Q--', Q)
+            #     cv2.imwrite('./crf_test.png',np.round(Q*255))
+            #     import sys
+            #     sys.exit(0)
 
+            mask = pred.unsqueeze(dim=2)
 
-            mask = np.zeros(shape=(pred.shape[0],pred.shape[1],3))
-            pred = np.round(pred) #network output
+            outimg = (mask*user_image).detach().cpu().numpy()
 
-            mask[:, :, 0] = pred[:, :]
-            mask[:, :, 1] = pred[:, :]
-            mask[:, :, 2] = pred[:, :]
+            # for w in range(outimg.shape[0]):
+            #     for h in range(outimg.shape[1]):
+            #         if all(outimg[w][h] == [0, 0, 0]):
+            #             alpha[w][h] = 0
+            #         else:
+            #             alpha[w][h] = 255  # 看看能否优化速度
+            #
+            # outimg = np.dstack([outimg, alpha])
 
-            outimg = np.where(mask > 127, user_image, 0)
-
-            alpha = np.zeros((outimg.shape[0], outimg.shape[1])).astype(int)
-
-            for w in range(outimg.shape[0]):
-                for h in range(outimg.shape[1]):
-                    if all(outimg[w][h] == [0, 0, 0]):
-                        alpha[w][h] = 0
-                    else:
-                        alpha[w][h] = 255  # 看看能否优化速度
-
-            outimg = np.dstack([outimg, alpha])
-
-            head  = '../eval/result/F3Net/'+ self.cfg.datapath.split('/')[-1]
+            head  = '../eval/results/F3Net/'+ self.cfg.datapath.split('/')[-1]
 
             if not os.path.exists(head):
                 os.makedirs(head)
 
-            cv2.imwrite(head+'/'+name+'.png', outimg)
+            cv2.imwrite(head+'/'+name+'.png', np.round(outimg))
+            total += datetime.datetime.now() - start
+            print("inference time: ", (total - datetime.datetime(1999, 1, 1)) / cnt)
+            cnt += 1
+
 
 if __name__=='__main__':
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
