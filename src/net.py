@@ -19,7 +19,7 @@ class PM(nn.Module):
         self.conv_K = nn.Conv2d(in_channels=inc,out_channels=inc//8,kernel_size=1)
         self.conv_V = nn.Conv2d(in_channels=inc,out_channels=inc,kernel_size=1)
 
-        self.softmax = nn.Softmax(dim=0)
+        #self.softmax = nn.Softmax(dim=0)
         # self.conv = nn.Conv2d(in_channels=inc,out_channels=1,kernel_size=7,padding=3)
 
 
@@ -30,7 +30,7 @@ class PM(nn.Module):
         K = f.view(B,C,N)
         V = f.view(B,C,N)
 
-        X = self.softmax(torch.matmul(Q,K.transpose(1,2)))
+        X = F.softmax(torch.matmul(Q,K.transpose(1,2)))
 
         f_ = self.gamma*(torch.matmul(X,V)).view(B,C,W,H)+f
 
@@ -39,12 +39,14 @@ class PM(nn.Module):
         K_ = self.conv_K(f_).view(B,C_,N)
         V_ = self.conv_V(f_).view(B,C,N)
 
-        X_ = self.softmax(torch.matmul(K_.transpose(1,2),Q_))
+        X_ = F.softmax(torch.matmul(K_.transpose(1,2),Q_))
         f__ = self.gamma_*torch.matmul(V_,X_).view(B,C,W,H)+f_
         #
         # l_map = self.conv(f__)
 
         return f__
+    def initialize(self):
+        weight_init(self)
 
 def weight_init(module):
     for n, m in module.named_children():

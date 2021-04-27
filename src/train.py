@@ -182,7 +182,7 @@ def train(net,optimizer,loader,sw,epoch,cfg):
     for step, (image, mask) in enumerate(loader):
         image, mask = image.cuda().float(), mask.cuda().float()
 
-        image,mask_a,mask_b = mixup_data(image,mask,use_cuda=)
+        #image,mask_a,mask_b = mixup_data(image,mask,use_cuda=)
         # print(image.shape) #(32,3,320,320)
         # print(mask.shape) #(32,1,320,320)
         # import sys
