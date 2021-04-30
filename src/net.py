@@ -171,7 +171,7 @@ class F3Net(nn.Module):
         self.linearr4 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
         self.linearr5 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
 
-        self.pm = PM(inc=64)
+
         self.initialize()
 
     def forward(self, x, shape=None):
@@ -195,7 +195,8 @@ class F3Net(nn.Module):
         if self.cfg.snapshot: #finetune
             if os.path.isfile(self.cfg.snapshot):
                 print('=> loading checkpoint {} \n'.format(self.cfg.snapshot))
-            checkpoints = torch.load(self.cfg.snapshot)['state_dict']
+            # checkpoints = torch.load(self.cfg.snapshot)['state_dict']
+            checkpoints = torch.load(self.cfg.snapshot)
             fielter_checkpoints = dict()
             for k,v in checkpoints.items():
                 if "module" in k:
