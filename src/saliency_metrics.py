@@ -73,6 +73,25 @@ class cal_mae(object):
     def show(self):
         return torch.mean(self.prediction)
 
+class cal_IOU(object):
+    def __init__(self):
+        self.prediction = []
+
+    def update(self,pred,gt):
+        score = self.cal(pred, gt)
+        self.prediction.append(score)
+
+    def cal(self, pred, target):
+        # compute the IoU of the foreground
+        Iand1 = torch.sum(target[:, :, :] * pred[:, :, :])
+        Ior1 = torch.sum(target[:, :, :]) + torch.sum(pred[:, :, :]) - Iand1
+        IoU1 = Iand1 / Ior1
+
+        return IoU1
+
+    def show(self):
+        return torch.mean(self.prediction)
+
 
 class cal_sm(object):
     # Structure-measure: A new way to evaluate foreground maps (ICCV 2017)
