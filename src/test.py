@@ -136,7 +136,7 @@ class Test(object):
 
             mask = pred.unsqueeze(dim=2)
 
-            outimg = (mask*user_image).detach().cpu().numpy()
+            outimg = torch.mul(mask, user_image).detach().cpu().numpy()
 
             # for w in range(outimg.shape[0]):
             #     for h in range(outimg.shape[1]):
