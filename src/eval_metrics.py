@@ -75,6 +75,7 @@ def run(index, mae, sm, fm, em, wfm, iou):
 
 
 
+
 class Mymanager(BaseManager):
     pass
 
@@ -118,7 +119,7 @@ if __name__ == '__main__':
         p = Pool(multiprocessing.cpu_count())
 
         for i in range(test_loader.size):
-            p.apply_async(run, args=(i, mae, fm, sm, em, wfm, iou, ))
+            p.apply_async(run, args=(i, mae, fm, sm, em, wfm, iou))
 
         p.close()
         p.join()
@@ -128,18 +129,18 @@ if __name__ == '__main__':
         sm = sm.show()
         em = em.show()
         wfm = wfm.show()
-        iou = iou.show()
+        IOU = iou.show()
 
         print('dataset: {} MAE: {:.4f} maxF: {:.4f} avgF: {:.4f} wfm: {:.4f} Sm: {:.4f} Em: {:.4f} IOU: {:.4f}'.format(dataset,
                                                                                                            MAE,
                                                                                                            maxf,
                                                                                                            meanf,
                                                                                                            wfm, sm,
-                                                                                                           em,iou))
+                                                                                                           em,IOU))
         f.write(
             'dataset: {} MAE: {:.4f} maxF: {:.4f} avgF: {:.4f} wfm: {:.4f} Sm: {:.4f} Em: {:.4f} IOU: {:.4f}'.format(dataset,
                                                                                                          MAE, maxf,
                                                                                                          meanf, wfm,
-                                                                                                         sm, em, iou))
+                                                                                                         sm, em, IOU))
         f.close()
     print(datetime.datetime.now() - start)

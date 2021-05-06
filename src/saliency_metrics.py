@@ -78,14 +78,14 @@ class cal_iou(object):
     def __init__(self):
         self.prediction = []
 
-    def update(self,pred,gt):
+    def update(self, pred, gt):
         score = self.cal(pred, gt)
         self.prediction.append(score)
 
     def cal(self, pred, target):
         # compute the IoU of the foreground
-        Iand1 = np.sum(target[:, :, :] * pred[:, :, :])
-        Ior1 = np.sum(target[:, :, :]) + np.sum(pred[:, :, :]) - Iand1
+        Iand1 = np.sum(target * pred)
+        Ior1 = np.sum(target) + np.sum(pred) - Iand1
         IoU1 = Iand1 / Ior1
 
         return IoU1
