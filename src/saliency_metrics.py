@@ -1,16 +1,76 @@
-import numpy as torch
+# from PIL import Image
+# import numpy as np
+# import matplotlib.pyplot as plt
+# from scipy.ndimage.morphology import binary_erosion
+# from pymatting.alpha.estimate_alpha_cf import estimate_alpha_cf
+# from pymatting.foreground.estimate_foreground_ml import estimate_foreground_ml
+# from pymatting.util.util import stack_images
+# 
+# 
+# foreground_threshold=240,  # 240
+# background_threshold=10,  # 10
+# erode_structure_size=10,  # 10
+# base_size=1000,  # 1000
+# 
+# img = Image.open('1.jpg').convert("RGB") #PIL
+# mask = Image.open('1.png').convert("L")
+# 
+# size = img.size
+# 
+# img.thumbnail((base_size, base_size), Image.LANCZOS)
+# mask = mask.resize(img.size, Image.LANCZOS)
+# 
+# img = np.asarray(img)
+# mask = np.asarray(mask)
+# 
+# # guess likely foreground/background
+# is_foreground = mask > foreground_threshold
+# is_background = mask < background_threshold
+# 
+# # erode foreground/background
+# structure = None
+# if erode_structure_size > 0:
+#     structure = np.ones((erode_structure_size, erode_structure_size), dtype=np.int)
+# 
+# is_foreground = binary_erosion(is_foreground, structure=structure)
+# is_background = binary_erosion(is_background, structure=structure, border_value=1)
+# 
+# # build trimap
+# # 0   = background
+# # 128 = unknown
+# # 255 = foreground
+# trimap = np.full(mask.shape, dtype=np.uint8, fill_value=128)
+# trimap[is_foreground] = 255
+# trimap[is_background] = 0
+# 
+# # build the cutout image
+# img_normalized = img / 255.0
+# trimap_normalized = trimap / 255.0
+# 
+# alpha = estimate_alpha_cf(img_normalized, trimap_normalized)
+# foreground = estimate_foreground_ml(img_normalized, alpha)
+# cutout = stack_images(foreground, alpha)
+# 
+# cutout = np.clip(cutout * 255, 0, 255).astype(np.uint8)
+# cutout = Image.fromarray(cutout)
+# cutout = cutout.resize(size, Image.LANCZOS)
+# 
+# plt.imshow(cutout)
+# plt.show()
+
+import numpy as np
 from scipy import ndimage
 from scipy.ndimage import convolve, distance_transform_edt as bwdist
-import torch
+
 
 class cal_fm(object):
     # Fmeasure(maxFm,meanFm)---Frequency-tuned salient region detection(CVPR 2009)
     def __init__(self, num, thds=255):
         self.num = num
         self.thds = thds
-        self.precision = torch.zeros((self.num, self.thds))
-        self.recall = torch.zeros((self.num, self.thds))
-        self.meanF = torch.zeros((self.num,1))
+        self.precision = np.zeros((self.num, self.thds))
+        self.recall = np.zeros((self.num, self.thds))
+        self.meanF = np.zeros((self.num,1))
         self.idx = 0
 
     def update(self, pred, gt):
@@ -26,9 +86,9 @@ class cal_fm(object):
         th = 2 * pred.mean()
         if th > 1:
             th = 1
-        binary = torch.zeros_like(pred)
+        binary = np.zeros_like(pred)
         binary[pred >= th] = 1
-        hard_gt = torch.zeros_like(gt)
+        hard_gt = np.zeros_like(gt)
         hard_gt[gt > 0.5] = 1
         tp = (binary * hard_gt).sum()
         if tp == 0:
@@ -38,15 +98,15 @@ class cal_fm(object):
             rec = tp / hard_gt.sum()
             meanF = 1.3 * pre * rec / (0.3 * pre + rec)
 ########################maxF##############################
-        pred = torch.uint8(pred * 255)
+        pred = np.uint8(pred * 255)
         target = pred[gt > 0.5]
         nontarget = pred[gt <= 0.5]
-        targetHist, _ = torch.histogram(target, bins=range(256))
-        nontargetHist, _ = torch.histogram(nontarget, bins=range(256))
-        targetHist = torch.cumsum(torch.flip(targetHist), axis=0)
-        nontargetHist = torch.cumsum(torch.flip(nontargetHist), axis=0)
+        targetHist, _ = np.histogram(target, bins=range(256))
+        nontargetHist, _ = np.histogram(nontarget, bins=range(256))
+        targetHist = np.cumsum(np.flip(targetHist), axis=0)
+        nontargetHist = np.cumsum(np.flip(nontargetHist), axis=0)
         precision = targetHist / (targetHist + nontargetHist + 1e-8)
-        recall = targetHist / torch.sum(gt)
+        recall = targetHist / np.sum(gt)
         return precision, recall, meanF
 
     def show(self):
@@ -68,10 +128,11 @@ class cal_mae(object):
         self.prediction.append(score)
 
     def cal(self, pred, gt):
-        return torch.mean(torch.abs(pred - gt))
+        return np.mean(np.abs(pred - gt))
 
     def show(self):
-        return torch.mean(self.prediction)
+        return np.mean(self.prediction)
+
 
 class cal_IOU(object):
     def __init__(self):
@@ -83,14 +144,14 @@ class cal_IOU(object):
 
     def cal(self, pred, target):
         # compute the IoU of the foreground
-        Iand1 = torch.sum(target[:, :, :] * pred[:, :, :])
-        Ior1 = torch.sum(target[:, :, :]) + torch.sum(pred[:, :, :]) - Iand1
+        Iand1 = np.sum(target[:, :, :] * pred[:, :, :])
+        Ior1 = np.sum(target[:, :, :]) + np.sum(pred[:, :, :]) - Iand1
         IoU1 = Iand1 / Ior1
 
         return IoU1
 
     def show(self):
-        return torch.mean(self.prediction)
+        return np.mean(self.prediction)
 
 
 class cal_sm(object):
@@ -105,14 +166,14 @@ class cal_sm(object):
         self.prediction.append(score)
 
     def show(self):
-        return torch.mean(self.prediction)
+        return np.mean(self.prediction)
 
     def cal(self, pred, gt):
-        y = torch.mean(gt)
+        y = np.mean(gt)
         if y == 0:
-            score = 1 - torch.mean(pred)
+            score = 1 - np.mean(pred)
         elif y == 1:
-            score = torch.mean(pred)
+            score = np.mean(pred)
         else:
             score = self.alpha * self.object(pred, gt) + (1 - self.alpha) * self.region(pred, gt)
         return score
@@ -121,12 +182,12 @@ class cal_sm(object):
         fg = pred * gt
         bg = (1 - pred) * (1 - gt)
 
-        u = torch.mean(gt)
-        return u * self.s_object(fg, gt) + (1 - u) * self.s_object(bg, torch.logical_not(gt))
+        u = np.mean(gt)
+        return u * self.s_object(fg, gt) + (1 - u) * self.s_object(bg, np.logical_not(gt))
 
     def s_object(self, in1, in2):
-        x = torch.mean(in1[in2])
-        sigma_x = torch.std(in1[in2])
+        x = np.mean(in1[in2])
+        sigma_x = np.std(in1[in2])
         return 2 * x / (pow(x, 2) + 1 + sigma_x + 1e-8)
 
     def region(self, pred, gt):
@@ -168,15 +229,15 @@ class cal_sm(object):
         return LT, RT, LB, RB
 
     def ssim(self, in1, in2):
-        in2 = torch.float32(in2)
+        in2 = np.float32(in2)
         h, w = in1.shape
         N = h * w
 
-        x = torch.mean(in1)
-        y = torch.mean(in2)
-        sigma_x = torch.var(in1)
-        sigma_y = torch.var(in2)
-        sigma_xy = torch.sum((in1 - x) * (in2 - y)) / (N - 1)
+        x = np.mean(in1)
+        y = np.mean(in2)
+        sigma_x = np.var(in1)
+        sigma_y = np.var(in2)
+        sigma_xy = np.sum((in1 - x) * (in2 - y)) / (N - 1)
 
         alpha = 4 * x * y * sigma_xy
         beta = (x * x + y * y) * (sigma_x + sigma_y)
@@ -203,34 +264,34 @@ class cal_em(object):
         th = 2 * pred.mean()
         if th > 1:
             th = 1
-        FM = torch.zeros(gt.shape)
+        FM = np.zeros(gt.shape)
         FM[pred >= th] = 1
-        FM = torch.array(FM,dtype=bool)
-        GT = torch.array(gt,dtype=bool)
-        dFM = torch.double(FM)
-        if (sum(sum(torch.double(GT)))==0):
+        FM = np.array(FM,dtype=bool)
+        GT = np.array(gt,dtype=bool)
+        dFM = np.double(FM)
+        if (sum(sum(np.double(GT)))==0):
             enhanced_matrix = 1.0-dFM
-        elif (sum(sum(torch.double(~GT)))==0):
+        elif (sum(sum(np.double(~GT)))==0):
             enhanced_matrix = dFM
         else:
-            dGT = torch.double(GT)
+            dGT = np.double(GT)
             align_matrix = self.AlignmentTerm(dFM, dGT)
             enhanced_matrix = self.EnhancedAlignmentTerm(align_matrix)
-        [w, h] = torch.shape(GT)
+        [w, h] = np.shape(GT)
         score = sum(sum(enhanced_matrix))/ (w * h - 1 + 1e-8)
         return score
     def AlignmentTerm(self,dFM,dGT):
-        mu_FM = torch.mean(dFM)
-        mu_GT = torch.mean(dGT)
+        mu_FM = np.mean(dFM)
+        mu_GT = np.mean(dGT)
         align_FM = dFM - mu_FM
         align_GT = dGT - mu_GT
         align_Matrix = 2. * (align_GT * align_FM)/ (align_GT* align_GT + align_FM* align_FM + 1e-8)
         return align_Matrix
     def EnhancedAlignmentTerm(self,align_Matrix):
-        enhanced = torch.power(align_Matrix + 1,2) / 4
+        enhanced = np.power(align_Matrix + 1,2) / 4
         return enhanced
     def show(self):
-        return torch.mean(self.prediction)
+        return np.mean(self.prediction)
 class cal_wfm(object):
     def __init__(self, beta=1):
         self.beta = beta
@@ -255,9 +316,9 @@ class cal_wfm(object):
         fspecial('gaussian',[shape],[sigma])
         """
         m, n = [(ss - 1.) / 2. for ss in shape]
-        y, x = torch.ogrid[-m:m + 1, -n:n + 1]
-        h = torch.exp(-(x * x + y * y) / (2. * sigma * sigma))
-        h[h < torch.finfo(h.dtype).eps * h.max()] = 0
+        y, x = np.ogrid[-m:m + 1, -n:n + 1]
+        h = np.exp(-(x * x + y * y) / (2. * sigma * sigma))
+        h[h < np.finfo(h.dtype).eps * h.max()] = 0
         sumh = h.sum()
         if sumh != 0:
             h /= sumh
@@ -269,10 +330,10 @@ class cal_wfm(object):
 
         # %Pixel dependency
         # E = abs(FG-dGT);
-        E = torch.abs(pred - gt)
+        E = np.abs(pred - gt)
         # Et = E;
         # Et(~GT)=Et(IDXT(~GT)); %To deal correctly with the edges of the foreground region
-        Et = torch.copy(E)
+        Et = np.copy(E)
         Et[gt == 0] = Et[Idxt[0][gt == 0], Idxt[1][gt == 0]]
 
         # K = fspecial('gaussian',7,5);
@@ -280,23 +341,23 @@ class cal_wfm(object):
         # MIN_E_EA(GT & EA<E) = EA(GT & EA<E);
         K = self.matlab_style_gauss2D((7, 7), sigma=5)
         EA = convolve(Et, weights=K, mode='constant', cval=0)
-        MIN_E_EA = torch.where(gt & (EA < E), EA, E)
+        MIN_E_EA = np.where(gt & (EA < E), EA, E)
 
         # %Pixel importance
         # B = ones(size(GT));
         # B(~GT) = 2-1*exp(log(1-0.5)/5.*Dst(~GT));
         # Ew = MIN_E_EA.*B;
-        B = torch.where(gt == 0, 2 - torch.exp(torch.log(0.5) / 5 * Dst), torch.ones_like(gt))
+        B = np.where(gt == 0, 2 - np.exp(np.log(0.5) / 5 * Dst), np.ones_like(gt))
         Ew = MIN_E_EA * B
 
         # TPw = sum(dGT(:)) - sum(sum(Ew(GT)));
         # FPw = sum(sum(Ew(~GT)));
-        TPw = torch.sum(gt) - torch.sum(Ew[gt == 1])
-        FPw = torch.sum(Ew[gt == 0])
+        TPw = np.sum(gt) - np.sum(Ew[gt == 1])
+        FPw = np.sum(Ew[gt == 0])
 
         # R = 1- mean2(Ew(GT)); %Weighed Recall
         # P = TPw./(eps+TPw+FPw); %Weighted Precision
-        R = 1 - torch.mean(Ew[gt])
+        R = 1 - np.mean(Ew[gt])
         P = TPw / (self.eps + TPw + FPw)
 
         # % Q = (1+Beta^2)*(R*P)./(eps+R+(Beta.*P));
@@ -305,4 +366,4 @@ class cal_wfm(object):
         return Q
 
     def show(self):
-        return torch.mean(self.scores_list)
+        return np.mean(self.scores_list)
