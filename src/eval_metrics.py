@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from saliency_metrics import cal_mae,cal_fm,cal_sm,cal_em,cal_wfm
+from saliency_metrics import cal_mae,cal_fm,cal_sm,cal_em,cal_wfm, cal_IOU
 from PIL import Image
 import torchvision.transforms as transforms
 from multiprocessing import Pool,Lock,Manager,Process
@@ -87,6 +87,7 @@ Mymanager.register('cal_fm', cal_fm)
 Mymanager.register('cal_sm', cal_sm)
 Mymanager.register('cal_em', cal_em)
 Mymanager.register('cal_wfm', cal_wfm)
+Mymanager.register('cal_iou', cal_IOU)
 
 if __name__ == '__main__':
 
@@ -106,6 +107,7 @@ if __name__ == '__main__':
         sm = manager.cal_sm()
         em = manager.cal_em()
         wfm = manager.cal_wfm()
+        iou = manager.cal_iou()
 
         # mae,fm,sm,em,wfm= cal_mae(),cal_fm(test_loader.size),cal_sm(),cal_em(),cal_wfm()
         f = open(dataset+'-eval.txt','w')
@@ -113,7 +115,7 @@ if __name__ == '__main__':
         p = Pool(multiprocessing.cpu_count())
 
         for i in range(test_loader.size):
-            p.apply_async(run,args=(i,mae,fm,sm,em,wfm,))
+            p.apply_async(run,args=(i,mae,fm,sm,em,wfm,iou,))
 
         p.close()
         p.join()
@@ -123,8 +125,9 @@ if __name__ == '__main__':
         sm = sm.show()
         em = em.show()
         wfm = wfm.show()
+        iou = iou.show()
 
-        print('dataset: {} MAE: {:.4f} maxF: {:.4f} avgF: {:.4f} wfm: {:.4f} Sm: {:.4f} Em: {:.4f}'.format(dataset, MAE, maxf,meanf,wfm,sm,em))
-        f.write('dataset: {} MAE: {:.4f} maxF: {:.4f} avgF: {:.4f} wfm: {:.4f} Sm: {:.4f} Em: {:.4f}'.format(dataset, MAE, maxf,meanf,wfm,sm,em))
+        print('dataset: {} MAE: {:.4f} maxF: {:.4f} avgF: {:.4f} wfm: {:.4f} Sm: {:.4f} Em: {:.4f} IOU: {:.4f}'.format(dataset, MAE, maxf,meanf,wfm,sm,em,iou))
+        f.write('dataset: {} MAE: {:.4f} maxF: {:.4f} avgF: {:.4f} wfm: {:.4f} Sm: {:.4f} Em: {:.4f} IOU: {:.4f}'.format(dataset, MAE, maxf,meanf,wfm,sm,em,iou))
         f.close()
     print(datetime.datetime.now()-start)
