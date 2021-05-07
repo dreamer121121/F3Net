@@ -192,17 +192,19 @@ if __name__=='__main__':
                         default='mask')
     parser.add_argument('--dataset',
                         type=str,
+                        nargs='+',
+                        default=[],
                         )
     parser.add_argument('--model',
                         type=str)
     parser.add_argument('--crf',
                         action='store_true')
     args = parser.parse_args()
-    # for path in ['../data/allbody_base']:
-    #     print("path:",path)
-    t = Test(dataset, F3Net, '../data/'+args.dataset)
-    if args.mode == 'mask':
-        t.save()
-    elif args.mode == 'fig':
-        t.save_fig()
-    # t.show()
+    for path in args.dataset:
+        print("="*30+"path:"+"="*30,path)
+        t = Test(dataset, F3Net, '../data/'+path)
+        if args.mode == 'mask':
+            t.save()
+        elif args.mode == 'fig':
+            t.save_fig()
+        # t.show()
