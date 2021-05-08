@@ -310,3 +310,53 @@ class cal_wfm(object):
 
     def show(self):
         return np.mean(self.scores_list)
+
+
+
+import torch
+import torch.nn as nn
+
+
+class Eval(nn.Module):
+    def __init__(self):
+        super(Eval, self).__init__()
+        self.pmae = []
+        self.piou = []
+
+    def forward(self, res, gt):
+        # print('---using Eval---')
+        return self.update_mae(res, gt), self.update_iou(res, gt)
+
+    def update_mae(self, res, gt):
+        def cal(pred,gt):
+            return torch.mean(torch.abs(pred-gt))
+        return cal(res, gt)
+
+    def update_iou(self, res, gt):
+        def cal(pred, target):
+            Iand1 = torch.sum(target * pred)
+            Ior1 = torch.sum(target) + torch.sum(pred) - Iand1
+            IoU1 = Iand1 / Ior1
+
+            return IoU1
+        return cal(res, gt)
+
+    # def show(self):
+    #     return torch.mean(torch.Tensor(self.pmae)), torch.mean(torch.Tensor(self.piou))
+
+
+class Statistic(object):
+    def __init__(self):
+        super(Statistic, self).__init__()
+        self.pmae = []
+        self.piou = []
+
+    def update(self, mae, iou):
+        self.pmae.append(mae)
+        self.piou.append(iou)
+
+    def show(self):
+        return torch.mean(torch.Tensor(self.pmae)), torch.mean(torch.Tensor(self.piou))
+
+
+

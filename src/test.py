@@ -122,7 +122,6 @@ class Test(object):
             alpha = torch.ones(user_image.size()[0],user_image.size()[1],1).to('cuda:1')*255
             user_image = torch.cat((user_image,alpha),dim=2)
 
-
             out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
             out = out2u
 
@@ -147,8 +146,7 @@ class Test(object):
             #
             # outimg = np.dstack([outimg, alpha])
 
-
-            head  = '../eval/results/F3Net/'+ self.cfg.datapath.split('/')[-1]
+            head  = '../eval/results/F3Net/' + self.cfg.datapath.split('/')[-1]
 
             if not os.path.exists(head):
                 os.makedirs(head)
@@ -184,6 +182,8 @@ class Test(object):
 
 
 if __name__=='__main__':
+
+
     #for path in ['../data/ECSSD', '../data/PASCAL-S', '../data/DUTS', '../data/HKU-IS', '../data/DUT-OMRON']:
     import argparse
     parser = argparse.ArgumentParser()

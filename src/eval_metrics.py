@@ -1,11 +1,23 @@
 import os
 import numpy as np
-from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm, cal_iou
+from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm, cal_iou, Eval, Statistic
 from PIL import Image
 import torchvision.transforms as transforms
 from multiprocessing import Pool, Lock, Manager, Process
 from multiprocessing.managers import BaseManager
 import multiprocessing
+
+import torch
+#
+# from multiprocessing import set_start_method
+#
+# try:
+#     set_start_method('forkserver', force=True)
+#
+# except RuntimeError:
+#     pass
+
+os.environ["CUDA_VISION_DEVICES"] = "2"
 
 dataset_path = '..'  ##gt_path
 
@@ -48,7 +60,21 @@ class eval_dataset:
         image = image.resize((w // args.scale, h // args.scale))
         gt = gt.resize((w // args.scale, h // args.scale))
         # self.index += 1
-        return image, gt
+        if image.size != gt.size:
+            x, y = gt.size
+            image = image.resize((x, y))
+        gt = np.asarray(gt, np.float32)
+        gt /= (gt.max() + 1e-8)
+        gt[gt > 0.5] = 1
+        gt[gt != 1] = 0
+        res = image
+        res = np.array(res)
+        if res.max() == res.min():
+            res = res / 255
+        else:
+            res = (res - res.min()) / (res.max() - res.min())
+
+        return torch.from_numpy(res), torch.from_numpy(gt)
 
     def rgb_loader(self, path):
         with open(path, 'rb') as f:
@@ -61,31 +87,14 @@ class eval_dataset:
             return img.convert('L')
 
 
-def run(index, mae, iou):
-    # with lock:
+def run(index):
     print('predicting for %d / %d' % (index + 1, test_loader.size))
-    sal, gt = test_loader.load_data(index)
-    if sal.size != gt.size:
-        x, y = gt.size
-        sal = sal.resize((x, y))
-    gt = np.asarray(gt, np.float32)
-    gt /= (gt.max() + 1e-8)
-    gt[gt > 0.5] = 1
-    gt[gt != 1] = 0
-    res = sal
-    res = np.array(res)
-    if res.max() == res.min():
-        res = res / 255
-    else:
-        res = (res - res.min()) / (res.max() - res.min())
-    mae.update(res, gt)
-    # sm.update(res, gt)
-    # fm.update(res, gt)
-    # em.update(res, gt)
-    # wfm.update(res, gt)
-    iou.update(res, gt)
+    res, gt = test_loader.load_data(index)
+    device = torch.device('cuda')
 
-
+    model = Eval().to(device)
+    mae, iou = model(res, gt)
+    metrics.update(mae, iou)
 
 
 class Mymanager(BaseManager):
@@ -104,6 +113,8 @@ Mymanager.register('cal_sm', cal_sm)
 Mymanager.register('cal_em', cal_em)
 Mymanager.register('cal_wfm', cal_wfm)
 Mymanager.register('cal_iou', cal_iou)
+Mymanager.register('Statistic', Statistic)
+
 
 if __name__ == '__main__':
 
@@ -120,42 +131,19 @@ if __name__ == '__main__':
 
         # instance share class
         manager = Manager2()
-        mae = manager.cal_mae()
-        # fm = manager.cal_fm(test_loader.size)
-        # sm = manager.cal_sm()
-        # em = manager.cal_em()
-        # wfm = manager.cal_wfm()
-        iou = manager.cal_iou()
 
-        # mae,fm,sm,em,wfm= cal_mae(),cal_fm(test_loader.size),cal_sm(),cal_em(),cal_wfm()
+        metrics = manager.Statistic()
         f = open(dataset + '-eval.txt', 'w')
 
         p = Pool(multiprocessing.cpu_count())
 
         for i in range(test_loader.size):
-            p.apply_async(run, args=(i, mae, iou))
+            p.apply_async(run, args=(i, ))
 
         p.close()
         p.join()
 
-        MAE = mae.show()
-        # maxf, meanf, _, _ = fm.show()
-        # sm = sm.show()
-        # em = em.show()
-        # wfm = wfm.show()
-        IOU = iou.show()
-        #
-        # print('dataset: {} MAE: {:.4f} maxF: {:.4f} avgF: {:.4f} wfm: {:.4f} Sm: {:.4f} Em: {:.4f} IOU: {:.4f}'.format(dataset,
-        #                                                                                                    MAE,
-        #                                                                                                    maxf,
-        #                                                                                                    meanf,
-        #                                                                                                    wfm, sm,
-        #                                                                                                    em,IOU))
-        # f.write(
-        #     'dataset: {} MAE: {:.4f} maxF: {:.4f} avgF: {:.4f} wfm: {:.4f} Sm: {:.4f} Em: {:.4f} IOU: {:.4f}'.format(dataset,
-        #                                                                                                  MAE, maxf,
-        #                                                                                                  meanf, wfm,
-        #                                                                                                  sm, em, IOU))
+        MAE, IOU = metrics.show()
 
         print('dataset: {} MAE: {:.4f} IOU: {:.4f}'.format(dataset, MAE,IOU))
         f.write(
