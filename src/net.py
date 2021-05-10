@@ -10,43 +10,50 @@ import torch.nn.functional as F
 
 # from train import log_stream
 
+
 class PM(nn.Module):
-    def __init__(self,inc):
+    def __init__(self, inc):
         super(PM, self).__init__()
+
         self.gamma = 1
         self.gamma_ = 1
-        self.conv_Q = nn.Conv2d(in_channels=inc,out_channels=inc//8,kernel_size=1)
-        self.conv_K = nn.Conv2d(in_channels=inc,out_channels=inc//8,kernel_size=1)
-        self.conv_V = nn.Conv2d(in_channels=inc,out_channels=inc,kernel_size=1)
+        self.conv_Q = nn.Sequential(nn.Conv2d(in_channels=inc, out_channels=inc//8, kernel_size=(1, 1)), nn.BatchNorm2d(inc//8))
+        self.conv_K = nn.Sequential(nn.Conv2d(in_channels=inc, out_channels=inc//8, kernel_size=(1, 1)), nn.BatchNorm2d(inc//8))
+        self.conv_V = nn.Sequential(nn.Conv2d(in_channels=inc, out_channels=inc, kernel_size=(1, 1)), nn.BatchNorm2d(inc))
 
-        #self.softmax = nn.Softmax(dim=0)
-        # self.conv = nn.Conv2d(in_channels=inc,out_channels=1,kernel_size=7,padding=3)
+        self.conv = nn.Conv2d(in_channels=inc, out_channels=1, kernel_size=(7, 7), padding=3)
 
+    def forward(self, f):
 
-    def forward(self,f):
-        (B,C,W,H) = f.size()
+        #====================Channel attention=================
+        (B, C, W, H) = f.size()
+
         N = W*H
-        Q = f.view(B,C,N)
-        K = f.view(B,C,N)
-        V = f.view(B,C,N)
+        Q = f.view(B, C, N)
+        K = f.view(B, C, N)
+        V = f.view(B, C, N)
 
-        X = F.softmax(torch.matmul(Q,K.transpose(1,2)))
+        X = torch.softmax(torch.matmul(Q, K.transpose(1, 2)), dim=2)
 
-        f_ = self.gamma*(torch.matmul(X,V)).view(B,C,W,H)+f
+        f_ = self.gamma*(torch.matmul(X, V)).view(B, C, W, H)+f
 
-        C_ = C//8
-        Q_=  self.conv_Q(f_).view(B,C_,N)
-        K_ = self.conv_K(f_).view(B,C_,N)
-        V_ = self.conv_V(f_).view(B,C,N)
+        #====================Spatial attention=================
+        C1 = C // 8
+        Q_ = self.conv_Q(f_).view(B, C1, N)
+        K_ = self.conv_K(f_).view(B, C1, N)
+        V_ = self.conv_V(f_).view(B, C, N)
 
-        X_ = F.softmax(torch.matmul(K_.transpose(1,2),Q_))
-        f__ = self.gamma_*torch.matmul(V_,X_).view(B,C,W,H)+f_
-        #
-        # l_map = self.conv(f__)
+        X_ = torch.softmax(torch.matmul(Q_.transpose(1, 2), K_), dim=2)
 
-        return f__
+        f__ = self.gamma_*torch.matmul(V_, X_.transpose(1, 2)).view(B, C, W, H)+f_
+
+        map = self.conv(f__)
+
+        return f__, map
+
     def initialize(self):
         weight_init(self)
+
 
 def weight_init(module):
     for n, m in module.named_children():
