@@ -49,7 +49,7 @@ class PM(nn.Module):
 
         map = self.conv(f__)
 
-        return f__, map
+        return f__
 
     def initialize(self):
         weight_init(self)

@@ -24,7 +24,7 @@ import argparse
 from saliency_metrics import cal_mae,cal_fm,cal_sm,cal_em,cal_wfm
 
 
-log_stream = open('train.log','a')
+log_stream = open('train_PM.log','a')
 
 global_step = 0
 best_mae = float('inf')
@@ -91,7 +91,7 @@ def main(Dataset,Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../data/'+args.dataset, savepath='./out', snapshot=args.resume, mode='train', batch=32,
+    train_cfg = Dataset.Config(datapath='../data/'+args.dataset, savepath='./out_PM', snapshot=args.resume, mode='train', batch=32,
                             lr=0.05, momen=0.9, decay=5e-4, epochs=32)
 
     eval_cfg =  Dataset.Config(datapath='../data/'+args.dataset, mode='test',eval_freq=1)
