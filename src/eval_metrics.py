@@ -31,7 +31,7 @@ class eval_dataset:
         # self.index = index
         image = self.binary_loader(os.path.join(self.image_root,self.img_list[index]+ '.png'))
         gt = self.binary_loader(os.path.join(self.gt_root,self.img_list[index] + '.png'))
-        scale = 4
+        scale = 1
         w,h = image.size
         image = image.resize((w//scale,h//scale))
         gt = gt.resize((w//scale,h//scale))
