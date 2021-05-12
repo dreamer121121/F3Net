@@ -30,6 +30,10 @@ def weight_init(module):
             weight_init(m)
         elif isinstance(m, nn.ReLU):
             pass
+        elif isinstance(m, nn.ModuleList):
+            pass
+        elif isinstance(m, nn.AdaptiveAvgPool2d):
+            pass
         else:
             m.initialize()
 
@@ -99,6 +103,9 @@ class convbnrelu(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
+    def initialize(self):
+        weight_init(self)
+
 
 class DSConv3x3(nn.Module):
     def __init__(self, in_channel, out_channel, stride=1, dilation=1, relu=True):
@@ -110,6 +117,11 @@ class DSConv3x3(nn.Module):
 
     def forward(self, x):
         return self.conv(x)
+
+    def initialize(self):
+        weight_init(self)
+
+
 
 
 class DSConv5x5(nn.Module):
@@ -170,6 +182,9 @@ class VAMM_backbone(nn.Module):
 
         return out2, out3, out4, out5
 
+    def initialize(self):
+        weight_init(self)
+
 
 class VAMM(nn.Module):
     def __init__(self, channel, dilation_level=[1,2,4,8], reduce_factor=4):
@@ -212,6 +227,10 @@ class VAMM(nn.Module):
         f = F.softmax(f, dim=1)
 
         return self.fuse(sum([brs[i] * f[:, i, ...] for i in range(len(self.dilation_level) + 1)]))	+ x
+
+    def initialize(self):
+        weight_init(self)
+
 
 
 class CFM(nn.Module):
@@ -283,9 +302,9 @@ class Decoder(nn.Module):
 class F3Net(nn.Module):
     def __init__(self, cfg):
         super(F3Net, self).__init__()
-        # self.cfg      = cfg
+        self.cfg      = cfg
         # self.bkbone   = ResNet()
-        self.bkbone = VAMM_backbone()
+        self.bkbone = VAMM_backbone('../res/SAMNet_backbone_pretrain.pth')
         # '../res/SAMNet_backbone_pretrain.pth'
         # self.squeeze5 = nn.Sequential(nn.Conv2d(2048, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
         # self.squeeze4 = nn.Sequential(nn.Conv2d(1024, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
@@ -307,7 +326,7 @@ class F3Net(nn.Module):
         self.linearr4 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
         self.linearr5 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
 
-        # self.initialize()
+        self.initialize()
 
     def forward(self, x, shape=None):
         out2h, out3h, out4h, out5v        = self.bkbone(x)
