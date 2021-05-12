@@ -61,10 +61,10 @@ class Bottleneck(nn.Module):
 class ResNet(nn.Module):
     def __init__(self):
         super(ResNet, self).__init__()
-        self.inplanes = 16
-        self.conv1    = nn.Conv2d(3, 16, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1      = nn.BatchNorm2d(16)
-        self.layer1   = self.make_layer( 16, 3, stride=1, dilation=1)
+        self.inplanes = 64
+        self.conv1    = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.bn1      = nn.BatchNorm2d(64)
+        self.layer1   = self.make_layer( 64, 3, stride=1, dilation=1)
         self.layer2   = self.make_layer(128, 4, stride=2, dilation=1)
         self.layer3   = self.make_layer(256, 6, stride=2, dilation=1)
         self.layer4   = self.make_layer(512, 3, stride=2, dilation=1)
@@ -122,6 +122,8 @@ class DSConv3x3(nn.Module):
         weight_init(self)
 
 
+
+
 class DSConv5x5(nn.Module):
     def __init__(self, in_channel, out_channel, stride=1, dilation=1, relu=True):
         super(DSConv5x5, self).__init__()
@@ -146,13 +148,13 @@ class VAMM_backbone(nn.Module):
                 VAMM(32, dilation_level=[1,2,3])
                 )
         self.layer3 = nn.Sequential(
-                DSConv3x3(32, 16, stride=2),
-                VAMM(16, dilation_level=[1,2,3]),
-                VAMM(16, dilation_level=[1,2,3]),
-                VAMM(16, dilation_level=[1,2,3])
+                DSConv3x3(32, 64, stride=2),
+                VAMM(64, dilation_level=[1,2,3]),
+                VAMM(64, dilation_level=[1,2,3]),
+                VAMM(64, dilation_level=[1,2,3])
                 )
         self.layer4 = nn.Sequential(
-                DSConv3x3(16, 96, stride=2),
+                DSConv3x3(64, 96, stride=2),
                 VAMM(96, dilation_level=[1,2,3]),
                 VAMM(96, dilation_level=[1,2,3]),
                 VAMM(96, dilation_level=[1,2,3]),
@@ -185,7 +187,7 @@ class VAMM_backbone(nn.Module):
 
 
 class VAMM(nn.Module):
-    def __init__(self, channel, dilation_level=[1, 2, 4, 8], reduce_factor=4):
+    def __init__(self, channel, dilation_level=[1,2,4,8], reduce_factor=4):
         super(VAMM, self).__init__()
         self.planes = channel
         self.dilation_level = dilation_level
@@ -301,16 +303,16 @@ class F3Net(nn.Module):
         super(F3Net, self).__init__()
         self.cfg      = cfg
         # self.bkbone   = ResNet()
-        self.bkbone = VAMM_backbone('../res/SAMNet_backbone_pretrain.pth')
+        self.bkbone = VAMM_backbone()
         # '../res/SAMNet_backbone_pretrain.pth'
-        # self.squeeze5 = nn.Sequential(nn.Conv2d(2048, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
-        # self.squeeze4 = nn.Sequential(nn.Conv2d(1024, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
-        # self.squeeze3 = nn.Sequential(nn.Conv2d( 512, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
-        # self.squeeze2 = nn.Sequential(nn.Conv2d( 256, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
+        # self.squeeze5 = nn.Sequential(nn.Conv2d(2048, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
+        # self.squeeze4 = nn.Sequential(nn.Conv2d(1024, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
+        # self.squeeze3 = nn.Sequential(nn.Conv2d( 512, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
+        # self.squeeze2 = nn.Sequential(nn.Conv2d( 256, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
 
         self.squeeze5 = nn.Sequential(nn.Conv2d(128, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
         self.squeeze4 = nn.Sequential(nn.Conv2d(96, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
-        self.squeeze3 = nn.Sequential(nn.Conv2d(16, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
+        self.squeeze3 = nn.Sequential(nn.Conv2d(64, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
         self.squeeze2 = nn.Sequential(nn.Conv2d(32, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
 
         self.decoder1 = Decoder()
@@ -322,8 +324,8 @@ class F3Net(nn.Module):
         self.linearr3 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
         self.linearr4 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
         self.linearr5 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
-
-        self.initialize()
+        #
+        # self.initialize()
 
     def forward(self, x, shape=None):
         out2h, out3h, out4h, out5v        = self.bkbone(x)
@@ -341,7 +343,6 @@ class F3Net(nn.Module):
         out5h = F.interpolate(self.linearr5(out5v), size=shape, mode='bilinear')
         return pred1, pred2, out2h, out3h, out4h, out5h
 
-
     def initialize(self):
         if self.cfg.snapshot: #finetune
             if os.path.isfile(self.cfg.snapshot):
@@ -357,6 +358,7 @@ class F3Net(nn.Module):
             self.load_state_dict(fielter_checkpoints)
         else:
             weight_init(self)
+
 
 if __name__ == '__main__':
     cfg = None
