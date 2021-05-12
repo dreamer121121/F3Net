@@ -61,10 +61,10 @@ class Bottleneck(nn.Module):
 class ResNet(nn.Module):
     def __init__(self):
         super(ResNet, self).__init__()
-        self.inplanes = 64
-        self.conv1    = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1      = nn.BatchNorm2d(64)
-        self.layer1   = self.make_layer( 64, 3, stride=1, dilation=1)
+        self.inplanes = 16
+        self.conv1    = nn.Conv2d(3, 16, kernel_size=7, stride=2, padding=3, bias=False)
+        self.bn1      = nn.BatchNorm2d(16)
+        self.layer1   = self.make_layer( 16, 3, stride=1, dilation=1)
         self.layer2   = self.make_layer(128, 4, stride=2, dilation=1)
         self.layer3   = self.make_layer(256, 6, stride=2, dilation=1)
         self.layer4   = self.make_layer(512, 3, stride=2, dilation=1)
@@ -122,8 +122,6 @@ class DSConv3x3(nn.Module):
         weight_init(self)
 
 
-
-
 class DSConv5x5(nn.Module):
     def __init__(self, in_channel, out_channel, stride=1, dilation=1, relu=True):
         super(DSConv5x5, self).__init__()
@@ -148,13 +146,13 @@ class VAMM_backbone(nn.Module):
                 VAMM(32, dilation_level=[1,2,3])
                 )
         self.layer3 = nn.Sequential(
-                DSConv3x3(32, 64, stride=2),
-                VAMM(64, dilation_level=[1,2,3]),
-                VAMM(64, dilation_level=[1,2,3]),
-                VAMM(64, dilation_level=[1,2,3])
+                DSConv3x3(32, 16, stride=2),
+                VAMM(16, dilation_level=[1,2,3]),
+                VAMM(16, dilation_level=[1,2,3]),
+                VAMM(16, dilation_level=[1,2,3])
                 )
         self.layer4 = nn.Sequential(
-                DSConv3x3(64, 96, stride=2),
+                DSConv3x3(16, 96, stride=2),
                 VAMM(96, dilation_level=[1,2,3]),
                 VAMM(96, dilation_level=[1,2,3]),
                 VAMM(96, dilation_level=[1,2,3]),
@@ -187,7 +185,7 @@ class VAMM_backbone(nn.Module):
 
 
 class VAMM(nn.Module):
-    def __init__(self, channel, dilation_level=[1,2,4,8], reduce_factor=4):
+    def __init__(self, channel, dilation_level=[1, 2, 4, 8], reduce_factor=4):
         super(VAMM, self).__init__()
         self.planes = channel
         self.dilation_level = dilation_level
@@ -232,27 +230,26 @@ class VAMM(nn.Module):
         weight_init(self)
 
 
-
 class CFM(nn.Module):
     def __init__(self):
         super(CFM, self).__init__()
-        self.conv1h = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn1h   = nn.BatchNorm2d(64)
-        self.conv2h = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn2h   = nn.BatchNorm2d(64)
-        self.conv3h = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn3h   = nn.BatchNorm2d(64)
-        self.conv4h = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn4h   = nn.BatchNorm2d(64)
+        self.conv1h = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn1h   = nn.BatchNorm2d(16)
+        self.conv2h = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn2h   = nn.BatchNorm2d(16)
+        self.conv3h = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn3h   = nn.BatchNorm2d(16)
+        self.conv4h = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn4h   = nn.BatchNorm2d(16)
 
-        self.conv1v = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn1v   = nn.BatchNorm2d(64)
-        self.conv2v = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn2v   = nn.BatchNorm2d(64)
-        self.conv3v = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn3v   = nn.BatchNorm2d(64)
-        self.conv4v = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn4v   = nn.BatchNorm2d(64)
+        self.conv1v = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn1v   = nn.BatchNorm2d(16)
+        self.conv2v = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn2v   = nn.BatchNorm2d(16)
+        self.conv3v = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn3v   = nn.BatchNorm2d(16)
+        self.conv4v = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn4v   = nn.BatchNorm2d(16)
 
     def forward(self, left, down):
         if down.size()[2:] != left.size()[2:]:
@@ -306,25 +303,25 @@ class F3Net(nn.Module):
         # self.bkbone   = ResNet()
         self.bkbone = VAMM_backbone('../res/SAMNet_backbone_pretrain.pth')
         # '../res/SAMNet_backbone_pretrain.pth'
-        # self.squeeze5 = nn.Sequential(nn.Conv2d(2048, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-        # self.squeeze4 = nn.Sequential(nn.Conv2d(1024, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-        # self.squeeze3 = nn.Sequential(nn.Conv2d( 512, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-        # self.squeeze2 = nn.Sequential(nn.Conv2d( 256, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
+        # self.squeeze5 = nn.Sequential(nn.Conv2d(2048, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
+        # self.squeeze4 = nn.Sequential(nn.Conv2d(1024, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
+        # self.squeeze3 = nn.Sequential(nn.Conv2d( 512, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
+        # self.squeeze2 = nn.Sequential(nn.Conv2d( 256, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
 
-        self.squeeze5 = nn.Sequential(nn.Conv2d(128, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-        self.squeeze4 = nn.Sequential(nn.Conv2d(96, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-        self.squeeze3 = nn.Sequential(nn.Conv2d(64, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-        self.squeeze2 = nn.Sequential(nn.Conv2d(32, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
+        self.squeeze5 = nn.Sequential(nn.Conv2d(128, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
+        self.squeeze4 = nn.Sequential(nn.Conv2d(96, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
+        self.squeeze3 = nn.Sequential(nn.Conv2d(16, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
+        self.squeeze2 = nn.Sequential(nn.Conv2d(32, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
 
         self.decoder1 = Decoder()
         self.decoder2 = Decoder()
-        self.linearp1 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
-        self.linearp2 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
+        self.linearp1 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
+        self.linearp2 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
 
-        self.linearr2 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
-        self.linearr3 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
-        self.linearr4 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
-        self.linearr5 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
+        self.linearr2 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
+        self.linearr3 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
+        self.linearr4 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
+        self.linearr5 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
 
         self.initialize()
 
