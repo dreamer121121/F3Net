@@ -10,6 +10,7 @@ import torch.nn.functional as F
 
 # from train import log_stream
 
+
 def weight_init(module):
     for n, m in module.named_children():
         print('initialize: '+n)
@@ -85,6 +86,134 @@ class ResNet(nn.Module):
         self.load_state_dict(torch.load('../res/resnet50-19c8e357.pth'), strict=False)
 
 
+class convbnrelu(nn.Module):
+    def __init__(self, in_channel, out_channel, k=3, s=1, p=1, g=1, d=1, bias=False, bn=True, relu=True):
+        super(convbnrelu, self).__init__()
+        conv = [nn.Conv2d(in_channel, out_channel, k, s, p, dilation=d, groups=g, bias=bias)]
+        if bn:
+            conv.append(nn.BatchNorm2d(out_channel))
+        if relu:
+            conv.append(nn.ReLU(inplace=True))
+        self.conv = nn.Sequential(*conv)
+
+    def forward(self, x):
+        return self.conv(x)
+
+
+class DSConv3x3(nn.Module):
+    def __init__(self, in_channel, out_channel, stride=1, dilation=1, relu=True):
+        super(DSConv3x3, self).__init__()
+        self.conv = nn.Sequential(
+                convbnrelu(in_channel, in_channel, k=3, s=stride, p=dilation, d=dilation, g=in_channel),
+                convbnrelu(in_channel, out_channel, k=1, s=1, p=0, relu=relu)
+                )
+
+    def forward(self, x):
+        return self.conv(x)
+
+
+class DSConv5x5(nn.Module):
+    def __init__(self, in_channel, out_channel, stride=1, dilation=1, relu=True):
+        super(DSConv5x5, self).__init__()
+        self.conv = nn.Sequential(
+                convbnrelu(in_channel, in_channel, k=5, s=stride, p=2*dilation, d=dilation, g=in_channel),
+                convbnrelu(in_channel, out_channel, k=1, s=1, p=0, relu=relu)
+                )
+
+    def forward(self, x):
+        return self.conv(x)
+
+
+class VAMM_backbone(nn.Module):
+    def __init__(self, pretrained=None):
+        super(VAMM_backbone, self).__init__()
+        self.layer1 = nn.Sequential(
+                convbnrelu(3, 16, k=3, s=2, p=1),
+                VAMM(16, dilation_level=[1,2,3])
+                )
+        self.layer2 = nn.Sequential(
+                DSConv3x3(16, 32, stride=2),
+                VAMM(32, dilation_level=[1,2,3])
+                )
+        self.layer3 = nn.Sequential(
+                DSConv3x3(32, 64, stride=2),
+                VAMM(64, dilation_level=[1,2,3]),
+                VAMM(64, dilation_level=[1,2,3]),
+                VAMM(64, dilation_level=[1,2,3])
+                )
+        self.layer4 = nn.Sequential(
+                DSConv3x3(64, 96, stride=2),
+                VAMM(96, dilation_level=[1,2,3]),
+                VAMM(96, dilation_level=[1,2,3]),
+                VAMM(96, dilation_level=[1,2,3]),
+                VAMM(96, dilation_level=[1,2,3]),
+                VAMM(96, dilation_level=[1,2,3]),
+                VAMM(96, dilation_level=[1,2,3])
+                )
+        self.layer5 = nn.Sequential(
+                DSConv3x3(96, 128, stride=2),
+                VAMM(128, dilation_level=[1,2]),
+                VAMM(128, dilation_level=[1,2]),
+                VAMM(128, dilation_level=[1,2])
+                )
+
+        if pretrained is not None:
+            self.load_state_dict(torch.load(pretrained))
+            print('Pretrained model loaded!')
+
+    def forward(self, x):
+        out1 = self.layer1(x)
+        out2 = self.layer2(out1)
+        out3 = self.layer3(out2)
+        out4 = self.layer4(out3)
+        out5 = self.layer5(out4)
+
+        return out2, out3, out4, out5
+
+
+class VAMM(nn.Module):
+    def __init__(self, channel, dilation_level=[1,2,4,8], reduce_factor=4):
+        super(VAMM, self).__init__()
+        self.planes = channel
+        self.dilation_level = dilation_level
+        self.conv = DSConv3x3(channel, channel, stride=1)
+        self.branches = nn.ModuleList([
+                DSConv3x3(channel, channel, stride=1, dilation=d) for d in dilation_level
+                ])
+        ### ChannelGate
+        self.gap = nn.AdaptiveAvgPool2d(1)
+        self.fc1 = convbnrelu(channel, channel, 1, 1, 0, bn=True, relu=True)
+        self.fc2 = nn.Conv2d(channel, (len(self.dilation_level) + 1) * channel, 1, 1, 0, bias=False)
+        self.fuse = convbnrelu(channel, channel, k=1, s=1, p=0, relu=False)
+        ### SpatialGate
+        self.convs = nn.Sequential(
+                convbnrelu(channel, channel // reduce_factor, 1, 1, 0, bn=True, relu=True),
+                DSConv3x3(channel // reduce_factor, channel // reduce_factor, stride=1, dilation=2),
+                DSConv3x3(channel // reduce_factor, channel // reduce_factor, stride=1, dilation=4),
+                nn.Conv2d(channel // reduce_factor, 1, 1, 1, 0, bias=False)
+                )
+
+    def forward(self, x):
+        conv = self.conv(x)
+        brs = [branch(conv) for branch in self.branches]
+        brs.append(conv)
+        gather = sum(brs)
+
+        ### ChannelGate
+        d = self.gap(gather)
+        d = self.fc2(self.fc1(d))
+        d = torch.unsqueeze(d, dim=1).view(-1, len(self.dilation_level) + 1, self.planes, 1, 1)
+
+        ### SpatialGate
+        s = self.convs(gather).unsqueeze(1)
+
+        ### Fuse two gates
+        f = d * s
+        f = F.softmax(f, dim=1)
+
+        return self.fuse(sum([brs[i] * f[:, i, ...] for i in range(len(self.dilation_level) + 1)]))	+ x
+
+
 class CFM(nn.Module):
     def __init__(self):
         super(CFM, self).__init__()
@@ -154,12 +283,19 @@ class Decoder(nn.Module):
 class F3Net(nn.Module):
     def __init__(self, cfg):
         super(F3Net, self).__init__()
-        self.cfg      = cfg
-        self.bkbone   = ResNet()
-        self.squeeze5 = nn.Sequential(nn.Conv2d(2048, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-        self.squeeze4 = nn.Sequential(nn.Conv2d(1024, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-        self.squeeze3 = nn.Sequential(nn.Conv2d( 512, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-        self.squeeze2 = nn.Sequential(nn.Conv2d( 256, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
+        # self.cfg      = cfg
+        # self.bkbone   = ResNet()
+        self.bkbone = VAMM_backbone()
+        # '../res/SAMNet_backbone_pretrain.pth'
+        # self.squeeze5 = nn.Sequential(nn.Conv2d(2048, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
+        # self.squeeze4 = nn.Sequential(nn.Conv2d(1024, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
+        # self.squeeze3 = nn.Sequential(nn.Conv2d( 512, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
+        # self.squeeze2 = nn.Sequential(nn.Conv2d( 256, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
+
+        self.squeeze5 = nn.Sequential(nn.Conv2d(128, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
+        self.squeeze4 = nn.Sequential(nn.Conv2d(96, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
+        self.squeeze3 = nn.Sequential(nn.Conv2d(64, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
+        self.squeeze2 = nn.Sequential(nn.Conv2d(32, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
 
         self.decoder1 = Decoder()
         self.decoder2 = Decoder()
@@ -171,8 +307,7 @@ class F3Net(nn.Module):
         self.linearr4 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
         self.linearr5 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
 
-
-        self.initialize()
+        # self.initialize()
 
     def forward(self, x, shape=None):
         out2h, out3h, out4h, out5v        = self.bkbone(x)
@@ -206,3 +341,15 @@ class F3Net(nn.Module):
             self.load_state_dict(fielter_checkpoints)
         else:
             weight_init(self)
+
+if __name__ == '__main__':
+    cfg = None
+    model = F3Net(cfg)
+    Input = torch.randn((1, 3, 352, 352))
+    # out = model(input)
+    from thop import profile, clever_format
+
+    flops, params = profile(model, inputs=(Input,))
+    flops, params = clever_format([flops, params], '%.3f')
+    print("flops {}, params {}".format(flops, params))
+
