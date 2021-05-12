@@ -122,8 +122,6 @@ class DSConv3x3(nn.Module):
         weight_init(self)
 
 
-
-
 class DSConv5x5(nn.Module):
     def __init__(self, in_channel, out_channel, stride=1, dilation=1, relu=True):
         super(DSConv5x5, self).__init__()
@@ -168,10 +166,10 @@ class VAMM_backbone(nn.Module):
                 VAMM(128, dilation_level=[1,2]),
                 VAMM(128, dilation_level=[1,2])
                 )
-
-        if pretrained is not None:
-            self.load_state_dict(torch.load(pretrained))
-            print('Pretrained model loaded!')
+        #
+        # if pretrained is not None:
+        #     self.load_state_dict(torch.load(pretrained))
+        #     print('Pretrained model loaded!')
 
     def forward(self, x):
         out1 = self.layer1(x)
@@ -183,7 +181,7 @@ class VAMM_backbone(nn.Module):
         return out2, out3, out4, out5
 
     def initialize(self):
-        weight_init(self)
+        self.load_state_dict(torch.load('../res/SAMNet_backbone_pretrain.pth'), strict=False)
 
 
 class VAMM(nn.Module):
@@ -303,7 +301,7 @@ class F3Net(nn.Module):
         super(F3Net, self).__init__()
         self.cfg      = cfg
         # self.bkbone   = ResNet()
-        self.bkbone = VAMM_backbone()
+        self.bkbone = VAMM_backbone('../res/SAMNet_backbone_pretrain.pth')
         # '../res/SAMNet_backbone_pretrain.pth'
         # self.squeeze5 = nn.Sequential(nn.Conv2d(2048, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
         # self.squeeze4 = nn.Sequential(nn.Conv2d(1024, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
@@ -324,8 +322,8 @@ class F3Net(nn.Module):
         self.linearr3 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
         self.linearr4 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
         self.linearr5 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
-        #
-        # self.initialize()
+
+        self.initialize()
 
     def forward(self, x, shape=None):
         out2h, out3h, out4h, out5v        = self.bkbone(x)
