@@ -32,6 +32,50 @@ def weight_init(module):
         else:
             m.initialize()
 
+def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
+    """3x3 convolution with padding"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
+                     padding=dilation, groups=groups, bias=False, dilation=dilation)
+
+
+class BasicBlock(nn.Module):
+    expansion = 1
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None, groups=1,
+                 base_width=64, dilation=1, norm_layer=None):
+        super(BasicBlock, self).__init__()
+        # if norm_layer is None:
+        #     norm_layer = nn.BatchNorm2d
+        # if groups != 1 or base_width != 64:
+        #     raise ValueError('BasicBlock only supports groups=1 and base_width=64')
+        # if dilation > 1:
+        #     raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
+        # Both self.conv1 and self.downsample layers downsample the input when stride != 1
+        self.conv1 = conv3x3(inplanes, planes, stride)
+        self.bn1 = nn.BatchNorm2d(planes)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = conv3x3(planes, planes)
+        self.bn2 = nn.BatchNorm2d(planes)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = self.relu(out)
+        return out
+
 
 class Bottleneck(nn.Module):
     def __init__(self, inplanes, planes, stride=1, downsample=None, dilation=1):
@@ -59,17 +103,19 @@ class ResNet(nn.Module):
         self.inplanes = 64
         self.conv1    = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1      = nn.BatchNorm2d(64)
-        self.layer1   = self.make_layer( 64, 3, stride=1, dilation=1)
-        self.layer2   = self.make_layer(128, 4, stride=2, dilation=1)
-        self.layer3   = self.make_layer(256, 6, stride=2, dilation=1)
-        self.layer4   = self.make_layer(512, 3, stride=2, dilation=1)
+        self.layer1   = self.make_layer( 64, 2, stride=1, dilation=1)
+        self.layer2   = self.make_layer(128, 2, stride=2, dilation=1)
+        self.layer3   = self.make_layer(256, 2, stride=2, dilation=1)
+        self.layer4   = self.make_layer(512, 2, stride=2, dilation=1)
 
     def make_layer(self, planes, blocks, stride, dilation):
-        downsample    = nn.Sequential(nn.Conv2d(self.inplanes, planes*4, kernel_size=1, stride=stride, bias=False), nn.BatchNorm2d(planes*4))
-        layers        = [Bottleneck(self.inplanes, planes, stride, downsample, dilation=dilation)]
-        self.inplanes = planes*4
+        downsample = None
+        if stride != 1 or self.inplanes != planes * 1:
+            downsample    = nn.Sequential(nn.Conv2d(self.inplanes, planes, kernel_size=1, stride=stride, bias=False), nn.BatchNorm2d(planes))
+        layers        = [BasicBlock(self.inplanes, planes, stride, downsample, dilation=dilation)]
+        self.inplanes = planes*1
         for _ in range(1, blocks):
-            layers.append(Bottleneck(self.inplanes, planes, dilation=dilation))
+            layers.append(BasicBlock(self.inplanes, planes, dilation=dilation))
         return nn.Sequential(*layers)
 
     def forward(self, x):
@@ -88,23 +134,23 @@ class ResNet(nn.Module):
 class CFM(nn.Module):
     def __init__(self):
         super(CFM, self).__init__()
-        self.conv1h = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn1h   = nn.BatchNorm2d(64)
-        self.conv2h = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn2h   = nn.BatchNorm2d(64)
-        self.conv3h = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn3h   = nn.BatchNorm2d(64)
-        self.conv4h = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn4h   = nn.BatchNorm2d(64)
+        self.conv1h = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn1h   = nn.BatchNorm2d(16)
+        self.conv2h = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn2h   = nn.BatchNorm2d(16)
+        self.conv3h = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn3h   = nn.BatchNorm2d(16)
+        self.conv4h = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn4h   = nn.BatchNorm2d(16)
 
-        self.conv1v = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn1v   = nn.BatchNorm2d(64)
-        self.conv2v = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn2v   = nn.BatchNorm2d(64)
-        self.conv3v = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn3v   = nn.BatchNorm2d(64)
-        self.conv4v = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn4v   = nn.BatchNorm2d(64)
+        self.conv1v = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn1v   = nn.BatchNorm2d(16)
+        self.conv2v = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn2v   = nn.BatchNorm2d(16)
+        self.conv3v = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn3v   = nn.BatchNorm2d(16)
+        self.conv4v = nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1)
+        self.bn4v   = nn.BatchNorm2d(16)
 
     def forward(self, left, down):
         if down.size()[2:] != left.size()[2:]:
@@ -156,20 +202,20 @@ class F3Net(nn.Module):
         super(F3Net, self).__init__()
         self.cfg      = cfg
         self.bkbone   = ResNet()
-        self.squeeze5 = nn.Sequential(nn.Conv2d(2048, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-        self.squeeze4 = nn.Sequential(nn.Conv2d(1024, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-        self.squeeze3 = nn.Sequential(nn.Conv2d( 512, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-        self.squeeze2 = nn.Sequential(nn.Conv2d( 256, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
+        self.squeeze5 = nn.Sequential(nn.Conv2d(512, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
+        self.squeeze4 = nn.Sequential(nn.Conv2d(256, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
+        self.squeeze3 = nn.Sequential(nn.Conv2d(128, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
+        self.squeeze2 = nn.Sequential(nn.Conv2d(64, 16, 1), nn.BatchNorm2d(16), nn.ReLU(inplace=True))
 
         self.decoder1 = Decoder()
         self.decoder2 = Decoder()
-        self.linearp1 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
-        self.linearp2 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
+        self.linearp1 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
+        self.linearp2 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
 
-        self.linearr2 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
-        self.linearr3 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
-        self.linearr4 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
-        self.linearr5 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
+        self.linearr2 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
+        self.linearr3 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
+        self.linearr4 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
+        self.linearr5 = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1)
 
         #
         # self.initialize()
@@ -208,15 +254,18 @@ class F3Net(nn.Module):
             self.load_state_dict(fielter_checkpoints)
         else:
             weight_init(self)
+
+
 if __name__ == '__main__':
     import datetime
     cfg = None
     model = F3Net(cfg)
-    model.eval()
+
     Input = torch.randn((1,3,352,352))
-    for i in range(1000):
-        out = model(Input)
-    # from thop import profile, clever_format
-    # flops, params = profile(model, inputs=(Input,))
-    # flops, params = clever_format([flops, params], '%.3f')
-    # print("flops {}, params {}".format(flops, params))
+    # for i in range(1000):
+    #     out = model(Input)
+    import torchvision
+    from thop import profile, clever_format
+    flops, params = profile(model, inputs=(Input,))
+    flops, params = clever_format([flops, params], '%.3f')
+    print("flops {}, params {}".format(flops, params))
