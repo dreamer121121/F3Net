@@ -171,11 +171,13 @@ class F3Net(nn.Module):
         self.linearr4 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
         self.linearr5 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
 
-
-        self.initialize()
+        #
+        # self.initialize()
 
     def forward(self, x, shape=None):
+        start = datetime.datetime.now()
         out2h, out3h, out4h, out5v        = self.bkbone(x)
+        print('----Time:----', datetime.datetime.now()-start)
         out2h, out3h, out4h, out5v        = self.squeeze2(out2h), self.squeeze3(out3h), self.squeeze4(out4h), self.squeeze5(out5v)
         out2h, out3h, out4h, out5v, pred1 = self.decoder1(out2h, out3h, out4h, out5v)
         out2h, out3h, out4h, out5v, pred2 = self.decoder2(out2h, out3h, out4h, out5v, pred1)
@@ -195,8 +197,8 @@ class F3Net(nn.Module):
         if self.cfg.snapshot: #finetune
             if os.path.isfile(self.cfg.snapshot):
                 print('=> loading checkpoint {} \n'.format(self.cfg.snapshot))
-            # checkpoints = torch.load(self.cfg.snapshot)['state_dict']
-            checkpoints = torch.load(self.cfg.snapshot)
+            checkpoints = torch.load(self.cfg.snapshot)['state_dict']
+            #checkpoints = torch.load(self.cfg.snapshot)
             fielter_checkpoints = dict()
             for k,v in checkpoints.items():
                 if "module" in k:
@@ -206,3 +208,15 @@ class F3Net(nn.Module):
             self.load_state_dict(fielter_checkpoints)
         else:
             weight_init(self)
+if __name__ == '__main__':
+    import datetime
+    cfg = None
+    model = F3Net(cfg)
+    model.eval()
+    Input = torch.randn((1,3,352,352))
+    for i in range(1000):
+        out = model(Input)
+    # from thop import profile, clever_format
+    # flops, params = profile(model, inputs=(Input,))
+    # flops, params = clever_format([flops, params], '%.3f')
+    # print("flops {}, params {}".format(flops, params))

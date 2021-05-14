@@ -29,12 +29,14 @@ class eval_dataset:
     def load_data(self, index):
         # image = self.rgb_loader(self.images[self.index])
         # self.index = index
+
         image = self.binary_loader(os.path.join(self.image_root, self.img_list[index] + '.png'))
         gt = self.binary_loader(os.path.join(self.gt_root, self.img_list[index] + '.png'))
         scale = 1
         w, h = image.size
         image = image.resize((w // scale, h // scale))
         gt = gt.resize((w // scale, h // scale))
+
         # self.index += 1
         return image, gt
 
