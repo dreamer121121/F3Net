@@ -124,7 +124,7 @@ class Test(object):
             image = input_data.to('cuda:1').float()
             out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
 
-            mask = torch.sigmoid(out2u[0, 0]).unsqueeze(dim=2).cpu().numpy()
+            mask = torch.sigmoid(out2u[0, 0]).cpu().numpy()
             # if args.crf:
             #     Q = self.dense_crf(user_image.astype(np.uint8), pred.cpu().numpy())
             #     print('--Q--', Q)
@@ -137,7 +137,7 @@ class Test(object):
 
                 mask = cv2.erode(img_thr, kernal, iterations=1)
 
-            outimg = np.multiply(user_image, mask)
+            outimg = np.multiply(user_image, mask[:, :, np.newaxis])
 
             del mask, out1u, out2u, out2r, out3r, out4r, out5r
 
