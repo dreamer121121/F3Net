@@ -107,35 +107,39 @@ class Test(object):
 
             name = name.replace('\n','')
             user_image = cv2.imread(self.path+'/image/'+name+'.jpg')
+            (w, h, c) = user_image.shape
 
             start = datetime.datetime.now()
-            input_data = user_image[:,:,::-1].astype(np.float32)
-            shape = [torch.tensor([int(input_data.shape[0])]),torch.tensor([int(input_data.shape[1])])]
+            input_data = user_image[:, :, ::-1].astype(np.float32)
+            shape = [torch.tensor([int(w)]), torch.tensor([int(h)])]
 
             input_data = normalize(input_data)
             input_data = resize(input_data)
             input_data = totensor(input_data)
-            input_data = input_data[np.newaxis,:,:,:]
+            input_data = input_data[np.newaxis, :, :, :]
+
+            alpha = np.ones((w, h, 1))*255
+            user_image = np.dstack((user_image, alpha))
 
             image = input_data.to('cuda:1').float()
-            user_image = torch.from_numpy(user_image).to('cuda:1').float()
-            alpha = torch.ones(user_image.size()[0],user_image.size()[1],1).to('cuda:1')*255
-            user_image = torch.cat((user_image,alpha),dim=2)
-
             out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
-            out = out2u
 
-            pred = (torch.sigmoid(out[0, 0]))
+            mask = torch.sigmoid(out2u[0, 0]).unsqueeze(dim=2).cpu().numpy()
             # if args.crf:
             #     Q = self.dense_crf(user_image.astype(np.uint8), pred.cpu().numpy())
             #     print('--Q--', Q)
             #     cv2.imwrite('./crf_test.png',np.round(Q*255))
             #     import sys
             #     sys.exit(0)
+            if args.erd:
+                ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
+                kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
 
-            mask = pred.unsqueeze(dim=2)
+                mask = cv2.erode(img_thr, kernal, iterations=1)
 
-            outimg = torch.mul(mask, user_image).detach().cpu().numpy()
+            outimg = np.multiply(user_image, mask)
+
+            del mask, out1u, out2u, out2r, out3r, out4r, out5r
 
             # for w in range(outimg.shape[0]):
             #     for h in range(outimg.shape[1]):
@@ -198,6 +202,8 @@ if __name__=='__main__':
     parser.add_argument('--model',
                         type=str)
     parser.add_argument('--crf',
+                        action='store_true')
+    parser.add_argument('--erd',
                         action='store_true')
     args = parser.parse_args()
     for path in args.dataset:
