@@ -99,7 +99,7 @@ def main(Dataset,Network):
             base.append(param)
         else:
             head.append(param)
-    optimizer      = torch.optim.SGD([{'params':base}, {'params':head}], lr=train_cfg.lr, momentum=train_cfg.momen, weight_decay=train_cfg.decay, nesterov=True)
+    optimizer      = torch.optim.SGD([{'params': base}, {'params': head}], lr=train_cfg.lr, momentum=train_cfg.momen, weight_decay=train_cfg.decay, nesterov=True)
     sw             = SummaryWriter(train_cfg.savepath)
 
     net = nn.DataParallel(net,device_ids=[0,1,2,3])

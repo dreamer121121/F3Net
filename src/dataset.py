@@ -46,6 +46,7 @@ class RandomFlip(object):
         else:
             return image, mask
 
+
 class Resize(object):
     def __init__(self, H, W):
         self.H = H
@@ -58,13 +59,32 @@ class Resize(object):
             return image, mask
         else:
             image = cv2.resize(image, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
-            return image,mask
+            return image, mask
+
+
 class ToTensor(object):
     def __call__(self, image, mask):
         image = torch.from_numpy(image)
         image = image.permute(2, 0, 1)
         mask  = torch.from_numpy(mask)
         return image, mask
+
+
+class Rotate(object):
+    def __call__(self, image, mask):
+        angle = [90, 180, 270][np.random.randint(0, 3)]
+
+        return self.rotate(image, angle), self.rotate(mask, angle)
+
+    def rotate(self, image, angle, center=None, scale=1.0):
+        (h, w) = image.shape[:2]
+        if center is None:
+            center = (w // 2, h // 2)
+
+        M = cv2.getRotationMatrix2D(center, angle, scale)
+
+        rotated = cv2.warpAffine(image, M, (w, h))
+        return rotated
 
 
 ########################### Config File ###########################
@@ -93,6 +113,7 @@ class Data(Dataset):
         self.randomflip = RandomFlip()
         self.resize     = Resize(352, 352)
         self.totensor   = ToTensor()
+        self.rotate     = Rotate()
         with open(cfg.datapath+'/'+cfg.mode+'.txt', 'r') as lines:
             self.samples = []
             for line in lines:
@@ -117,6 +138,7 @@ class Data(Dataset):
 
         if self.cfg.mode=='train':
             image, mask = self.normalize(image, mask)
+            image, mask = self.rotate(image, mask)
             image, mask = self.randomcrop(image, mask)
             image, mask = self.randomflip(image, mask)
             return image, mask
