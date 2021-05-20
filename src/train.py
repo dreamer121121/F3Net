@@ -47,6 +47,9 @@ def parse_args():
     parser.add_argument('--epochs',
                         type=int,
                         default=32)
+    parser.add_argument('--start',
+                        type=int,
+                        default=0)
     args = parser.parse_args()
 
     return args
@@ -76,9 +79,9 @@ def main(Dataset,Network):
     args = parse_args()
 
     train_cfg = Dataset.Config(datapath='../data/'+args.dataset, savepath='./out', snapshot=args.resume, mode='train', batch=args.batch_size,
-                            lr=0.05, momen=0.9, decay=5e-4, epochs=args.epochs)
+                            lr=0.05, momen=0.9, decay=5e-4, epochs=args.epochs, start=args.start)
 
-    eval_cfg =  Dataset.Config(datapath='../data/'+args.dataset, mode='test',eval_freq=1)
+    eval_cfg =  Dataset.Config(datapath='../data/'+args.dataset, mode='test', eval_freq=1)
 
     train_data = Dataset.Data(train_cfg)
 
@@ -102,19 +105,19 @@ def main(Dataset,Network):
     optimizer      = torch.optim.SGD([{'params':base}, {'params':head}], lr=train_cfg.lr, momentum=train_cfg.momen, weight_decay=train_cfg.decay, nesterov=True)
     sw             = SummaryWriter(train_cfg.savepath)
 
-    net = nn.DataParallel(net,device_ids=[0,1,2,3])
+    net = nn.DataParallel(net, device_ids=[0,1,2,3])
     net.cuda()
 
 
     if args.eval:
         evaluate(net,eval_dataloader)
 
-    for epoch in range(train_cfg.epochs):
+    for epoch in range(train_cfg.start, train_cfg.epochs):
         log_stream.write('='*30+'Epoch: '+str(epoch+1)+'='*30+'\n')
         optimizer.param_groups[0]['lr'] = (1-abs((epoch+1)/(train_cfg.epochs+1)*2-1))*train_cfg.lr*0.1
         optimizer.param_groups[1]['lr'] = (1-abs((epoch+1)/(train_cfg.epochs+1)*2-1))*train_cfg.lr
 
-        train(net,optimizer,train_dataloader,sw,epoch,train_cfg)
+        train(net, optimizer, train_dataloader, sw, epoch, train_cfg)
 
         if (epoch + 1) % eval_cfg.eval_freq == 0 or epoch == train_cfg.epochs - 1:
 
