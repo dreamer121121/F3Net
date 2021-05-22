@@ -71,8 +71,8 @@ class ToTensor(object):
 class Config(object):
     def __init__(self, **kwargs):
         self.kwargs = kwargs
-        self.mean   = np.array([[[124.55, 118.90, 102.94]]])
-        self.std    = np.array([[[ 56.77,  55.97,  57.50]]])
+        self.mean   = np.array([[[138.78, 130.52, 123.38]]])
+        self.std    = np.array([[[ 62.8,  61.65,  62.37]]])
         print('\nParameters...')
         for k, v in self.kwargs.items():
             print('%-10s: %s'%(k, v))
