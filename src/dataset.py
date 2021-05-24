@@ -91,8 +91,8 @@ class Rotate(object):
 class Config(object):
     def __init__(self, **kwargs):
         self.kwargs = kwargs
-        self.mean   = np.array([[[124.55, 118.90, 102.94]]])
-        self.std    = np.array([[[ 56.77,  55.97,  57.50]]])
+        self.mean   = np.array([[[138.0536, 130.8389, 121.07198]]])
+        self.std    = np.array([[[ 71.3735, 69.87299, 73.78777]]])
         print('\nParameters...')
         for k, v in self.kwargs.items():
             print('%-10s: %s'%(k, v))
