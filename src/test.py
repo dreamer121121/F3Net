@@ -23,12 +23,12 @@ from transform import *
 import pydensecrf.densecrf as dcrf
 
 
-def run(normalize,resize,totensor,name):
+def run(path,normalize,resize,totensor,name):
     print('-----run-----')
-    user_image = cv2.imread(self.path + '/image/' + name + '.jpg')
+    cfg = dataset.Config(datapath=path, snapshot=args.model, mode='test')
+    user_image = cv2.imread(cfg.path + '/image/' + name + '.jpg')
     (w, h, c) = user_image.shape
 
-    start = datetime.datetime.now()
     input_data = user_image[:, :, ::-1].astype(np.float32)
     shape = [torch.tensor([int(w)]), torch.tensor([int(h)])]
 
@@ -41,8 +41,10 @@ def run(normalize,resize,totensor,name):
     user_image = np.dstack((user_image, alpha))
 
     image = input_data.to('cuda:1').float()
-    net = F3Net()
-    out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
+    net = F3Net(cfg)
+    net.train(False)
+    net.to('cuda:1')
+    out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
 
     mask = (torch.sigmoid(out2u[0, 0]) * 255).cpu().numpy()
 
@@ -56,7 +58,7 @@ def run(normalize,resize,totensor,name):
 
     del mask, out1u, out2u, out2r, out3r, out4r, out5r
 
-    head = '../eval/results/F3Net/' + self.cfg.datapath.split('/')[-1]
+    head = '../eval/results/F3Net/' + cfg.datapath.split('/')[-1]
 
     if not os.path.exists(head):
         os.makedirs(head)
@@ -228,7 +230,6 @@ class Test(object):
         return Q
 
 
-   
     def save_fig(self):
         normalize = Normalize(mean=self.cfg.mean, std=self.cfg.std)
         resize = Resize(352, 352)
@@ -245,7 +246,7 @@ class Test(object):
 
         for name in file_list:
             name = name.replace('\n', '')
-            p.apply_async(run, args=(self.cfg, normalize,resize,totensor,name,))
+            p.apply_async(run, args=(self.cfg.datapath,normalize,resize,totensor,name,))
         p.close()
         p.join()
         print("----finish----")
