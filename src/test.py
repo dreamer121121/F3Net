@@ -23,6 +23,44 @@ from transform import *
 import pydensecrf.densecrf as dcrf
 
 
+@torch.no_grad()
+def run(self, name, normalize, resize, totensor):
+    user_image = cv2.imread(self.path + '/image/' + name + '.jpg')
+    (w, h, c) = user_image.shape
+
+    input_data = user_image[:, :, ::-1].astype(np.float32)
+    shape = [torch.tensor([int(w)]), torch.tensor([int(h)])]
+
+    input_data = normalize(input_data)
+    input_data = resize(input_data)
+    input_data = totensor(input_data)
+    input_data = input_data[np.newaxis, :, :, :]
+
+    alpha = np.ones((w, h, 1)) * 255
+    user_image = np.dstack((user_image, alpha))
+
+    image = input_data.to('cuda:1').float()
+    out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
+
+    mask = (torch.sigmoid(out2u[0, 0]) * 255).cpu().numpy()
+    if args.erd:
+        # ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
+        kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+
+        mask = cv2.erode(mask, kernal, iterations=1)
+
+    outimg = np.multiply(user_image, mask[:, :, np.newaxis] / 255)
+
+    del mask, out1u, out2u, out2r, out3r, out4r, out5r
+
+    head = '../eval/results/F3Net/' + self.cfg.datapath.split('/')[-1]
+
+    if not os.path.exists(head):
+        os.makedirs(head)
+
+    cv2.imwrite(head + '/' + name + '.png', np.round(outimg))
+
+
 class Test(object):
     def __init__(self, Dataset, Network, path):
         ## dataset
@@ -186,43 +224,6 @@ class Test(object):
         return Q
 
 
-    @torch.no_grad()
-    def run(self, name, normalize, resize, totensor):
-        user_image = cv2.imread(self.path + '/image/' + name + '.jpg')
-        (w, h, c) = user_image.shape
-
-        input_data = user_image[:, :, ::-1].astype(np.float32)
-        shape = [torch.tensor([int(w)]), torch.tensor([int(h)])]
-
-        input_data = normalize(input_data)
-        input_data = resize(input_data)
-        input_data = totensor(input_data)
-        input_data = input_data[np.newaxis, :, :, :]
-
-        alpha = np.ones((w, h, 1)) * 255
-        user_image = np.dstack((user_image, alpha))
-
-        image = input_data.to('cuda:1').float()
-        out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
-
-        mask = (torch.sigmoid(out2u[0, 0]) * 255).cpu().numpy()
-        if args.erd:
-            #ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
-            kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-
-            mask = cv2.erode(mask, kernal, iterations=1)
-
-        outimg = np.multiply(user_image, mask[:, :, np.newaxis] / 255)
-
-        del mask, out1u, out2u, out2r, out3r, out4r, out5r
-
-        head = '../eval/results/F3Net/' + self.cfg.datapath.split('/')[-1]
-
-        if not os.path.exists(head):
-            os.makedirs(head)
-
-        cv2.imwrite(head + '/' + name + '.png', np.round(outimg))
-
    
     def save_fig(self):
         normalize = Normalize(mean=self.cfg.mean, std=self.cfg.std)
@@ -240,7 +241,7 @@ class Test(object):
 
         for name in file_list:
             name = name.replace('\n', '')
-            p.apply_async(self.run, args=(name, normalize, resize, totensor))
+            p.apply_async(run, args=(self, name, normalize, resize, totensor,) )
         p.close()
         p.join()
         print("----finish----")
