@@ -160,6 +160,7 @@ class Test(object):
             print("inference time: ", (total - datetime.datetime(1999, 1, 1)) / cnt)
             cnt += 1
 
+
     def dense_crf(slef,img, output_probs):  # img为输入的图像，output_probs是经过网络预测后得到的结果
         h = output_probs.shape[0]  # 高度
         w = output_probs.shape[1]  # 宽度
@@ -184,6 +185,8 @@ class Test(object):
 
         return Q
 
+
+    @torch.no_grad()
     def run(self, name, normalize, resize, totensor):
         user_image = cv2.imread(self.path + '/image/' + name + '.jpg')
         (w, h, c) = user_image.shape
@@ -204,10 +207,10 @@ class Test(object):
 
         mask = (torch.sigmoid(out2u[0, 0]) * 255).cpu().numpy()
         if args.erd:
-            ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
+            #ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
             kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
 
-            mask = cv2.erode(img_thr, kernal, iterations=1)
+            mask = cv2.erode(mask, kernal, iterations=1)
 
         outimg = np.multiply(user_image, mask[:, :, np.newaxis] / 255)
 
@@ -220,7 +223,7 @@ class Test(object):
 
         cv2.imwrite(head + '/' + name + '.png', np.round(outimg))
 
-    @torch.no_grad()
+   
     def save_fig(self):
         normalize = Normalize(mean=self.cfg.mean, std=self.cfg.std)
         resize = Resize(352, 352)
