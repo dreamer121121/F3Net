@@ -3,6 +3,7 @@
 
 import os
 import sys
+import time
 sys.path.insert(0, '../')
 sys.dont_write_bytecode = True
 
@@ -22,48 +23,57 @@ from transform import *
 
 import pydensecrf.densecrf as dcrf
 
+import multiprocessing
+from multiprocessing import Pool
 
-def run(path,normalize,resize,totensor,name):
-    print('-----run-----')
-    cfg = dataset.Config(datapath=path, snapshot=args.model, mode='test')
-    user_image = cv2.imread(cfg.path + '/image/' + name + '.jpg')
-    (w, h, c) = user_image.shape
+multiprocessing.set_start_method('forkserver', force=True)
 
-    input_data = user_image[:, :, ::-1].astype(np.float32)
-    shape = [torch.tensor([int(w)]), torch.tensor([int(h)])]
+@torch.no_grad()
+def run(path,normalize,resize,totensor,name, args,id):
+    time.sleep(6)
+    try:
+        cfg = dataset.Config(datapath=path, snapshot=args.model, mode='test')
+        user_image = cv2.imread(path + '/image/' + name + '.jpg')
+        (w, h, c) = user_image.shape
 
-    input_data = normalize(input_data)
-    input_data = resize(input_data)
-    input_data = totensor(input_data)
-    input_data = input_data[np.newaxis, :, :, :]
+        input_data = user_image[:, :, ::-1].astype(np.float32)
+        shape = [torch.tensor([int(w)]), torch.tensor([int(h)])]
 
-    alpha = np.ones((w, h, 1)) * 255
-    user_image = np.dstack((user_image, alpha))
+        input_data = normalize(input_data)
+        input_data = resize(input_data)
+        input_data = totensor(input_data)
+        input_data = input_data[np.newaxis, :, :, :]
 
-    image = input_data.to('cuda:1').float()
-    net = F3Net(cfg)
-    net.train(False)
-    net.to('cuda:1')
-    out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
+        alpha = np.ones((w, h, 1)) * 255
+        user_image = np.dstack((user_image, alpha))
 
-    mask = (torch.sigmoid(out2u[0, 0]) * 255).cpu().numpy()
+        image = input_data.to('cuda:'+str(id)).float()
 
-    if args.erd:
-        # ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
-        kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+        net = F3Net(cfg)
+        net.train(False)
+        net = net.to('cuda:'+str(id))
+        out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
 
-        mask = cv2.erode(mask, kernal, iterations=1)
+        mask = (torch.sigmoid(out2u[0, 0]) * 255).cpu().numpy()
 
-    outimg = np.multiply(user_image, mask[:, :, np.newaxis] / 255)
+        if args.erd:
+            ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
+            kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
 
-    del mask, out1u, out2u, out2r, out3r, out4r, out5r
+            mask = cv2.erode(img_thr, kernal, iterations=1)
 
-    head = '../eval/results/F3Net/' + cfg.datapath.split('/')[-1]
+        outimg = np.multiply(user_image, mask[:, :, np.newaxis] / 255)
 
-    if not os.path.exists(head):
-        os.makedirs(head)
+        del mask, out1u, out2u, out2r, out3r, out4r, out5r
 
-    cv2.imwrite(head + '/' + name + '.png', np.round(outimg))
+        head = '../eval/results/F3Net/' + path.split('/')[-1]
+
+        if not os.path.exists(head):
+            os.makedirs(head)
+
+        cv2.imwrite(head + '/' + name + '.png', np.round(outimg))
+    except Exception as e:
+        print(e)
 
 
 
@@ -76,7 +86,7 @@ class Test(object):
         ## network
         self.net    = Network(self.cfg)
         self.net.train(False)
-        #self.net.to('cuda:1')
+        self.net.to('cuda:1')
         self.path = path
 
     def show(self):
@@ -204,7 +214,6 @@ class Test(object):
             print("inference time: ", (total - datetime.datetime(1999, 1, 1)) / cnt)
             cnt += 1
 
-
     def dense_crf(slef,img, output_probs):  # img为输入的图像，output_probs是经过网络预测后得到的结果
         h = output_probs.shape[0]  # 高度
         w = output_probs.shape[1]  # 宽度
@@ -229,8 +238,8 @@ class Test(object):
 
         return Q
 
-
     def save_fig(self):
+        gpu_index = 0
         normalize = Normalize(mean=self.cfg.mean, std=self.cfg.std)
         resize = Resize(352, 352)
         totensor = ToTensor()
@@ -240,16 +249,19 @@ class Test(object):
         file_list = fr.readlines()
 
         fr.close()
-        import multiprocessing
-        from multiprocessing import Pool
-        p = Pool(multiprocessing.cpu_count())
+
+        p = Pool(8)
 
         for name in file_list:
+            if gpu_index == 4:
+                gpu_index = 0
             name = name.replace('\n', '')
-            p.apply_async(run, args=(self.cfg.datapath,normalize,resize,totensor,name,))
+            p.apply_async(run, args=(self.cfg.datapath,normalize,resize,totensor,name,args,gpu_index,))
+            gpu_index += 1
         p.close()
         p.join()
         print("----finish----")
+
 
 if __name__=='__main__':
 
@@ -273,10 +285,13 @@ if __name__=='__main__':
                         action='store_true')
     args = parser.parse_args()
     for path in args.dataset:
+        time.sleep(10)
         print("="*30+"path:"+"="*30,path)
         t = Test(dataset, F3Net, '../data/'+path)
         if args.mode == 'mask':
             t.save()
         elif args.mode == 'fig':
             t.save_fig()
+        elif args.mode == 'deploy':
+            t.deploy()
         # t.show()
