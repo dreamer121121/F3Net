@@ -39,26 +39,27 @@ def main():
             foreground = Image.open('./fgimgs/'+fg)
             fg_name = fg.split('.')[0]
 
-            for bg in bg_list:
-                if bg.endswith('.jpg'):
-                    #angle = [0, 90, 180, 270][np.random.randint(0, 4)]
-                    #foreground = foreground.rotate(angle)
-                    bg_name = bg.split('.')[0]
-                    background = Image.open('./bgimgs/'+bg)
+            bg = bg_list[np.random.randint(len(bg_list))]
 
-                    background = rescale(background,b_short_side_size)
-                    foreground = rescale(foreground,f_short_side_size)
-                    print('----background---', background.size)
-                    print('----foreground---', foreground.size)
+            if bg.endswith('.jpg'):
+                #angle = [0, 90, 180, 270][np.random.randint(0, 4)]
+                #foreground = foreground.rotate(angle)
+                bg_name = bg.split('.')[0]
+                background = Image.open('./bgimgs/'+bg)
 
-                    b_center = (background.size[0]//2,background.size[1]//2)
-                    f_center = (foreground.size[0]//2,foreground.size[1]//2)
-                    f_left = (b_center[0]-f_center[0]+randx,b_center[1]-f_center[1]+randy)
+                background = rescale(background,b_short_side_size)
+                foreground = rescale(foreground,f_short_side_size)
+                print('----background---', background.size)
+                print('----foreground---', foreground.size)
 
-                    background.paste(foreground,f_left,foreground)
-                    background.save('./pasted_img/img/p_'+fg_name+'_'+bg_name+'.jpg')
+                b_center = (background.size[0]//2,background.size[1]//2)
+                f_center = (foreground.size[0]//2,foreground.size[1]//2)
+                f_left = (b_center[0]-f_center[0]+randx,b_center[1]-f_center[1]+randy)
 
-                    genmask(foreground,background,f_left,fg_name+'_'+bg_name)
+                background.paste(foreground,f_left,foreground)
+                background.save('./pasted_img/img/p_'+fg_name+'_'+bg_name+'.jpg')
+
+                genmask(foreground,background,f_left,fg_name+'_'+bg_name)
 
 
 if __name__ =='__main__':
