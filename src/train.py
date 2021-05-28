@@ -127,23 +127,23 @@ def main(Dataset,Network):
 
         if (epoch + 1) % eval_cfg.eval_freq == 0 or epoch == train_cfg.epochs - 1:
 
-            mae = evaluate(net,eval_dataloader)
+            mae, loss = evaluate(net, eval_dataloader)
 
             global best_mae
             is_best = mae < best_mae
-            best_mae = min(mae,best_mae)
+            best_mae = min(mae, best_mae)
 
             save_checkpoints({
-                'epoch':epoch+1,
-                'state_dict':net.state_dict(),
-                'best_mae':best_mae,
-            }, is_best,epoch,train_cfg)
+                'epoch': epoch+1,
+                'state_dict': net.state_dict(),
+                'best_mae': best_mae,
+            }, is_best, epoch, train_cfg)
 
-            log_stream.write('Valid MAE: {:.4f} \n'.format(mae))
+            log_stream.write('Valid MAE: {:.4f} Loss {:.4f}\n'.format(mae,loss))
             log_stream.flush()
 
 
-def evaluate(net,loader):
+def evaluate(net, loader):
     mae = cal_mae()
     net.eval()
 
@@ -154,6 +154,15 @@ def evaluate(net,loader):
 
             image = image.cuda().float()
             out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
+            loss1u = structure_loss(out1u, mask)
+            loss2u = structure_loss(out2u, mask)
+
+            loss2r = structure_loss(out2r, mask)
+            loss3r = structure_loss(out3r, mask)
+            loss4r = structure_loss(out4r, mask)
+            loss5r = structure_loss(out5r, mask)
+            loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
+
             out = out2u
             pred = (torch.sigmoid(out[0, 0])).cpu().numpy()
 
@@ -171,7 +180,7 @@ def evaluate(net,loader):
             mae.update(pred,mask)
         Mae = mae.show()
 
-    return Mae
+    return Mae,loss
 
 
 def train(net,optimizer,loader,sw,epoch,cfg):
