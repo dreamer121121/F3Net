@@ -50,6 +50,12 @@ def parse_args():
     parser.add_argument('--start',
                         type=int,
                         default=0)
+    parser.add_argument('--lr',
+                        type=float,
+                        default=0.05)
+    parser.add_argument('--decay',
+                        type=float,
+                        default=5e-4)
     args = parser.parse_args()
 
     return args
@@ -79,7 +85,7 @@ def main(Dataset,Network):
     args = parse_args()
 
     train_cfg = Dataset.Config(datapath='../data/'+args.dataset, savepath='./out', snapshot=args.resume, mode='train', batch=args.batch_size,
-                            lr=0.05, momen=0.9, decay=5e-4, epochs=args.epochs, start=args.start)
+                            lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
     eval_cfg =  Dataset.Config(datapath='../data/'+args.dataset, mode='test', eval_freq=1)
 
