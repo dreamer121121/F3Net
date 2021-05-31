@@ -139,7 +139,7 @@ def main(Dataset,Network):
                 'best_mae': best_mae,
             }, is_best, epoch, train_cfg)
 
-            log_stream.write('Valid MAE: {:.4f} Loss {:.4f}\n'.format(mae,loss))
+            log_stream.write('Valid MAE: {:.4f} Loss {:.4f}\n'.format(mae, loss))
             log_stream.flush()
 
 
@@ -153,14 +153,15 @@ def evaluate(net, loader):
         for image, mask, shape, name in loader:
 
             image = image.cuda().float()
+            mask_1 = torch.unsqueeze(mask, dim=0).cuda().float()
             out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
-            loss1u = structure_loss(out1u, mask)
-            loss2u = structure_loss(out2u, mask)
+            loss1u = structure_loss(out1u[0], mask_1)
+            loss2u = structure_loss(out2u[0], mask_1)
 
-            loss2r = structure_loss(out2r, mask)
-            loss3r = structure_loss(out3r, mask)
-            loss4r = structure_loss(out4r, mask)
-            loss5r = structure_loss(out5r, mask)
+            loss2r = structure_loss(out2r[0], mask_1)
+            loss3r = structure_loss(out3r[0], mask_1)
+            loss4r = structure_loss(out4r[0], mask_1)
+            loss5r = structure_loss(out5r[0], mask_1)
             loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
 
             out = out2u
