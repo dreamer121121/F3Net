@@ -152,8 +152,7 @@ def evaluate(net, loader):
     with torch.no_grad():
         for image, mask, shape, name in loader:
 
-            image = image.cuda().float()
-            mask_1 = torch.unsqueeze(mask, dim=0).cuda().float()
+            image, mask_1 = image.cuda().float(), mask.cuda().float()
             out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
             loss1u = structure_loss(out1u[0], mask_1)
             loss2u = structure_loss(out2u[0], mask_1)
