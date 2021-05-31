@@ -144,14 +144,12 @@ def main(Dataset,Network):
 
 
 def evaluate(net, loader):
+    Loss = 0.0
     mae = cal_mae()
-    net.eval()
-
     net.eval()
 
     with torch.no_grad():
         for image, mask, shape, name in loader:
-
             image = image.cuda().float()
             mask_1 = torch.unsqueeze(mask, dim=0).cuda().float()
             out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
@@ -179,9 +177,10 @@ def evaluate(net, loader):
             else:
                 pred = (pred - pred.min()) / (pred.max() - pred.min())
             mae.update(pred,mask)
+            Loss += loss
         Mae = mae.show()
 
-    return Mae,loss
+    return Mae, Loss/len(loader)
 
 
 def train(net,optimizer,loader,sw,epoch,cfg):
