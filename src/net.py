@@ -9,6 +9,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # from train import log_stream
+config = {'convert': [[64, 256, 512, 1024, 2048], [128, 256, 256, 512, 512]],
+          'deep_pool': [[512, 512, 256, 256, 128], [512, 256, 256, 128, 128], [False, True, True, True, False],
+                               [True, True, True, True, False]], 'score': 128}
 
 def weight_init(module):
     for n, m in module.named_children():
@@ -151,15 +154,51 @@ class Decoder(nn.Module):
         weight_init(self)
 
 
+class ConvertLayer(nn.Module):
+    def __init__(self, list_k):
+        super(ConvertLayer, self).__init__()
+        up = []
+        for i in range(len(list_k[0])):
+            up.append(nn.Sequential(nn.Conv2d(list_k[0][i], list_k[1][i], 1, 1, bias=False), nn.ReLU(inplace=True)))
+        self.convert0 = nn.ModuleList(up)
+
+    def forward(self, list_x):
+        resl = []
+        for i in range(len(list_x)):
+            resl.append(self.convert0[i](list_x[i]))
+        return resl
+
+class ScoreLayer(nn.Module):
+    def __init__(self, k):
+        super(ScoreLayer, self).__init__()
+        self.score = nn.Conv2d(k, 1, 1, 1)
+
+    def forward(self, x, x_size=None):
+        x = self.score(x)
+        if x_size is not None:
+            x = F.interpolate(x, x_size[2:], mode='bilinear', align_corners=True)
+        return x
+
 class F3Net(nn.Module):
     def __init__(self, cfg):
         super(F3Net, self).__init__()
         self.cfg      = cfg
         self.bkbone   = ResNet()
+        self.convert = ConvertLayer(config['convert'])
         self.squeeze5 = nn.Sequential(nn.Conv2d(2048, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
         self.squeeze4 = nn.Sequential(nn.Conv2d(1024, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
         self.squeeze3 = nn.Sequential(nn.Conv2d( 512, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
         self.squeeze2 = nn.Sequential(nn.Conv2d( 256, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
+
+        self.conv_1 = nn.Conv2d(512, 512, 3, 1, 1, bias=False)
+        self.conv_2 = nn.Conv2d(256, 256, 3, 1, 1, bias=False)
+        self.conv_3 = nn.Conv2d(256, 256, 3, 1, 1, bias=False)
+        self.conv_4 = nn.Conv2d(128, 128, 3, 1, 1, bias=False)
+
+        self.score_contour1 = ScoreLayer(512)
+        self.score_contour2 = ScoreLayer(256)
+        self.score_contour3 = ScoreLayer(256)
+        self.score_contour4 = ScoreLayer(128)
 
         self.decoder1 = Decoder()
         self.decoder2 = Decoder()
@@ -174,9 +213,15 @@ class F3Net(nn.Module):
 
     def forward(self, x, shape=None):
         out2h, out3h, out4h, out5v        = self.bkbone(x)
+        merge = self.convert([out2h, out3h, out4h, out5v])
         out2h, out3h, out4h, out5v        = self.squeeze2(out2h), self.squeeze3(out3h), self.squeeze4(out4h), self.squeeze5(out5v)
         out2h, out3h, out4h, out5v, pred1 = self.decoder1(out2h, out3h, out4h, out5v)
         out2h, out3h, out4h, out5v, pred2 = self.decoder2(out2h, out3h, out4h, out5v, pred1)
+
+        out_contour1 = self.score_contour1(self.conv_1(merge[1]))
+        out_contour2 = self.score_contour2(self.conv_2(merge[2]))
+        out_contour3 = self.score_contour3(self.conv_3(merge[3]))
+        out_contour4 = self.score_contour4(self.conv_4(merge[4]))
 
         shape = x.size()[2:] if shape is None else shape
         pred1 = F.interpolate(self.linearp1(pred1), size=shape, mode='bilinear')
@@ -186,7 +231,7 @@ class F3Net(nn.Module):
         out3h = F.interpolate(self.linearr3(out3h), size=shape, mode='bilinear')
         out4h = F.interpolate(self.linearr4(out4h), size=shape, mode='bilinear')
         out5h = F.interpolate(self.linearr5(out5v), size=shape, mode='bilinear')
-        return pred1, pred2, out2h, out3h, out4h, out5h
+        return pred1, pred2, out2h, out3h, out4h, out5h, out_contour1, out_contour2, out_contour3, out_contour4
 
 
     def initialize(self):
