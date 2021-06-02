@@ -79,6 +79,24 @@ def structure_loss(pred, mask):
     return (wbce+wiou).mean()
 
 
+def bce2d(input, target, reduction=None):
+    assert(input.size() == target.size())
+    pos = torch.eq(target, 1).float()
+    neg = torch.eq(target, 0).float()
+
+    num_pos = torch.sum(pos)
+    num_neg = torch.sum(neg)
+    num_total = num_pos + num_neg
+
+    alpha = num_neg  / num_total
+    beta = 1.1 * num_pos  / num_total
+    # target pixel = 1 -> weight beta
+    # target pixel = 0 -> weight 1-beta
+    weights = alpha * pos + beta * neg
+
+    return F.binary_cross_entropy_with_logits(input, target, weights, reduction=reduction)
+
+
 def main(Dataset,Network):
 
     ##parse args
@@ -185,13 +203,13 @@ def evaluate(net, loader):
 
 def train(net,optimizer,loader,sw,epoch,cfg):
     net.train()
-    for step, (image, mask) in enumerate(loader):
+    for step, (image, mask,contour) in enumerate(loader):
         image, mask = image.cuda().float(), mask.cuda().float()
         # print(image.shape) #(32,3,320,320)
         # print(mask.shape) #(32,1,320,320)
         # import sys
         # sys.exit(0)
-        out1u, out2u, out2r, out3r, out4r, out5r = net(image)
+        out1u, out2u, out2r, out3r, out4r, out5r, out_contour1, out_contour2, out_contour3, out_contour4 = net(image)
         loss1u = structure_loss(out1u, mask)
         loss2u = structure_loss(out2u, mask)
 
@@ -199,7 +217,16 @@ def train(net,optimizer,loader,sw,epoch,cfg):
         loss3r = structure_loss(out3r, mask)
         loss4r = structure_loss(out4r, mask)
         loss5r = structure_loss(out5r, mask)
-        loss   = (loss1u+loss2u)/2+loss2r/2+loss3r/4+loss4r/8+loss5r/16
+        loss_sal   = (loss1u+loss2u)/2+loss2r/2+loss3r/4+loss4r/8+loss5r/16
+
+        loss_e1 = bce2d(out_contour1, contour)
+        loss_e2 = bce2d(out_contour2, contour)
+        loss_e3 = bce2d(out_contour3, contour)
+        loss_e4 = bce2d(out_contour4, contour)
+
+        loss_edge = loss_e1+loss_e2+loss_e3+loss_e4
+
+        loss = loss_sal+loss_edge
 
         optimizer.zero_grad()
         loss.backward()

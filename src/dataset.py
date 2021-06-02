@@ -13,14 +13,15 @@ class Normalize(object):
         self.mean = mean 
         self.std  = std
     
-    def __call__(self, image, mask):
+    def __call__(self, image, mask, contour):
         image = (image - self.mean)/self.std
         mask /= 255
-        return image, mask
+        contour /= 255
+        return image, mask, contour
 
 
 class RandomCrop(object):
-    def __call__(self, image, mask):
+    def __call__(self, image, mask, contour):
         H,W,_   = image.shape
         randw   = np.random.randint(W/8)
         randh   = np.random.randint(H/8)
@@ -31,7 +32,7 @@ class RandomCrop(object):
         #if self.cal_shape(tmp_mask):
         #    return image[p0:p1,p2:p3, :], mask
         #else:
-        return image[p0:p1,p2:p3, :], mask[p0:p1,p2:p3]
+        return image[p0:p1,p2:p3, :], mask[p0:p1,p2:p3], contour[p0:p1, p2:p3]
 
     #def cal_shape(array):
     #    h, w = array.shape
@@ -40,11 +41,11 @@ class RandomCrop(object):
 
 
 class RandomFlip(object):
-    def __call__(self, image, mask):
+    def __call__(self, image, mask, contour):
         if np.random.randint(2)==0:
-            return image[:,::-1,:], mask[:, ::-1]
+            return image[:,::-1,:], mask[:, ::-1], contour[:, ::-1]
         else:
-            return image, mask
+            return image, mask, contour
 
 
 class Resize(object):
@@ -52,22 +53,24 @@ class Resize(object):
         self.H = H
         self.W = W
 
-    def __call__(self, image, mask,mode='train'):
+    def __call__(self, image, mask, contour, mode='train'):
         if mode == 'train':
             image = cv2.resize(image, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
             mask  = cv2.resize( mask, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
-            return image, mask
+            contour  = cv2.resize( contour, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
+            return image, mask, contour
         else:
             image = cv2.resize(image, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
-            return image, mask
+            return image, mask, contour
 
 
 class ToTensor(object):
-    def __call__(self, image, mask):
+    def __call__(self, image, mask, contour):
         image = torch.from_numpy(image)
         image = image.permute(2, 0, 1)
         mask  = torch.from_numpy(mask)
-        return image, mask
+        contour = torch.from_numpy(contour)
+        return image, mask, contour
 
 
 class Rotate(object):
@@ -125,7 +128,7 @@ class Data(Dataset):
         #print('-----img  name ----',self.cfg.datapath+'/image/'+name+'.jpg')
         image = cv2.imread(self.cfg.datapath+'/image/'+name+'.jpg')[:,:,::-1].astype(np.float32)
         mask  = cv2.imread(self.cfg.datapath+'/mask/' +name+'.png', 0).astype(np.float32)
-
+        contour  = cv2.imread(self.cfg.datapath+'/contour/' +name+'.png', 0).astype(np.float32)
 
 
         # if len(image.shape) != 3
@@ -137,30 +140,31 @@ class Data(Dataset):
         shape = mask.shape
 
         if self.cfg.mode=='train':
-            image, mask = self.normalize(image, mask)
-            image, mask = self.rotate(image, mask)
-            image, mask = self.randomcrop(image, mask)
-            image, mask = self.randomflip(image, mask)
-            return image, mask
+            image, mask, contour = self.normalize(image, mask, contour)
+            image, mask, contour = self.randomcrop(image, mask, contour)
+            image, mask, contour = self.randomflip(image, mask, contour)
+            return image, mask, contour
         else:
-            image, mask = self.normalize(image, mask)
-            image, mask = self.resize(image, mask, self.cfg.mode)
-            image, mask = self.totensor(image, mask)
-            return image, mask, shape, name
+            image, mask, contour = self.normalize(image, mask, contour)
+            image, mask, contour = self.resize(image, mask, contour, self.cfg.mode)
+            image, mask, contour = self.totensor(image, mask, contour)
+            return image, mask, contour, shape, name
 
     def collate(self, batch):
         size = [224, 256, 288, 320, 352][np.random.randint(0, 5)]
-        image, mask = [list(item) for item in zip(*batch)]
+        image, mask, contour = [list(item) for item in zip(*batch)]
         for i in range(len(batch)):
             try:
                 image[i] = cv2.resize(image[i], dsize=(size, size), interpolation=cv2.INTER_LINEAR)
                 mask[i]  = cv2.resize(mask[i],  dsize=(size, size), interpolation=cv2.INTER_LINEAR)
+                contour[i] = cv2.resize(contour[i],  dsize=(size, size), interpolation=cv2.INTER_LINEAR)
             except:
                 print("name: ",self.name)
                 print("maks.shape: ",mask[i].shape)
         image = torch.from_numpy(np.stack(image, axis=0)).permute(0,3,1,2)
         mask  = torch.from_numpy(np.stack(mask, axis=0)).unsqueeze(1)
-        return image, mask
+        contour = torch.from_numpy(np.stack(contour, axis=0)).unsqueeze(1)
+        return image, mask, contour
 
     def __len__(self):
         return len(self.samples)

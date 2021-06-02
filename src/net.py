@@ -64,7 +64,7 @@ class ResNet(nn.Module):
         self.bn1      = nn.BatchNorm2d(64)
         self.layer1   = self.make_layer( 64, 3, stride=1, dilation=1)
         self.layer2   = self.make_layer(128, 4, stride=2, dilation=1)
-        self.layer3   = self.make_layer(256, 23, stride=2, dilation=1)
+        self.layer3   = self.make_layer(256, 6, stride=2, dilation=1)
         self.layer4   = self.make_layer(512, 3, stride=2, dilation=1)
 
     def make_layer(self, planes, blocks, stride, dilation):
@@ -85,7 +85,7 @@ class ResNet(nn.Module):
         return out2, out3, out4, out5
 
     def initialize(self):
-        self.load_state_dict(torch.load('../res/resnet101-5d3b4d8f.pth'), strict=False)
+        self.load_state_dict(torch.load('./resnet50-19c8e357.pth'), strict=False)
 
 
 class CFM(nn.Module):
