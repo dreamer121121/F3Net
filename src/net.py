@@ -171,13 +171,11 @@ class F3Net(nn.Module):
         self.linearr4 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
         self.linearr5 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
 
-        #
-        # self.initialize()
+
+        self.initialize()
 
     def forward(self, x, shape=None):
-        start = datetime.datetime.now()
         out2h, out3h, out4h, out5v        = self.bkbone(x)
-        print('----Time:----', datetime.datetime.now()-start)
         out2h, out3h, out4h, out5v        = self.squeeze2(out2h), self.squeeze3(out3h), self.squeeze4(out4h), self.squeeze5(out5v)
         out2h, out3h, out4h, out5v, pred1 = self.decoder1(out2h, out3h, out4h, out5v)
         out2h, out3h, out4h, out5v, pred2 = self.decoder2(out2h, out3h, out4h, out5v, pred1)
