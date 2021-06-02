@@ -311,8 +311,6 @@ class cal_wfm(object):
 
     def show(self):
         return np.mean(self.scores_list)
-<<<<<<< HEAD
-=======
 
 import torch
 import torch.nn as nn
@@ -344,4 +342,4 @@ class Eval(nn.Module):
 
     def show(self):
         return torch.mean(torch.Tensor(self.pmae)), torch.mean(torch.Tensor(self.piou))
->>>>>>> resnet101
+
