@@ -64,6 +64,7 @@ class cal_mae(object):
         self.prediction = []
 
     def update(self, pred, gt):
+        print('---update mae-----')
         score = self.cal(pred, gt)
         self.prediction.append(score)
 
@@ -310,3 +311,37 @@ class cal_wfm(object):
 
     def show(self):
         return np.mean(self.scores_list)
+<<<<<<< HEAD
+=======
+
+import torch
+import torch.nn as nn
+
+
+class Eval(nn.Module):
+    def __init__(self):
+        super(Eval, self).__init__()
+        self.pmae = []
+        self.piou = []
+
+    def forward(self, res, gt):
+        self.update_mae(res, gt)
+        self.update_iou(res, gt)
+
+    def update_mae(self,res,gt):
+        def cal(pred,gt):
+            return torch.mean(torch.abs(pred-gt))
+        self.pmae.append(cal(res, gt))
+
+    def update_iou(self, res, gt):
+        def cal(pred, target):
+            Iand1 = torch.sum(target * pred)
+            Ior1 = torch.sum(target) + torch.sum(pred) - Iand1
+            IoU1 = Iand1 / Ior1
+
+            return IoU1
+        self.piou.append(cal(res, gt))
+
+    def show(self):
+        return torch.mean(torch.Tensor(self.pmae)), torch.mean(torch.Tensor(self.piou))
+>>>>>>> resnet101

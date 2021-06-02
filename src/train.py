@@ -40,7 +40,22 @@ def parse_args():
                         help='resume from pretrained model to fintune')
     parser.add_argument('--dataset',
                         type=str,
-                        help='dataset for training')
+                        help='dataset used for train')
+    parser.add_argument('--batch_size',
+                       type=int,
+                       default=32)
+    parser.add_argument('--epochs',
+                        type=int,
+                        default=32)
+    parser.add_argument('--start',
+                        type=int,
+                        default=0)
+    parser.add_argument('--lr',
+                        type=float,
+                        default=0.05)
+    parser.add_argument('--decay',
+                        type=float,
+                        default=5e-4)
     args = parser.parse_args()
 
     return args
@@ -91,10 +106,10 @@ def main(Dataset,Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../data/'+args.dataset, savepath='./out', snapshot=args.resume, mode='train', batch=32,
-                            lr=0.05, momen=0.9, decay=5e-4, epochs=32)
+    train_cfg = Dataset.Config(datapath='../data/'+args.dataset, savepath='./out', snapshot=args.resume, mode='train', batch=args.batch_size,
+                            lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
-    eval_cfg =  Dataset.Config(datapath='../data/'+args.dataset, mode='test',eval_freq=1)
+    eval_cfg =  Dataset.Config(datapath='../data/'+args.dataset, mode='test', eval_freq=1)
 
     train_data = Dataset.Data(train_cfg)
 
@@ -115,49 +130,60 @@ def main(Dataset,Network):
             base.append(param)
         else:
             head.append(param)
-    optimizer      = torch.optim.SGD([{'params':base}, {'params':head}], lr=train_cfg.lr, momentum=train_cfg.momen, weight_decay=train_cfg.decay, nesterov=True)
+    optimizer      = torch.optim.SGD([{'params': base}, {'params': head}], lr=train_cfg.lr, momentum=train_cfg.momen, weight_decay=train_cfg.decay, nesterov=True)
     sw             = SummaryWriter(train_cfg.savepath)
 
-    net = nn.DataParallel(net,device_ids=[0,1,2,3])
+    net = nn.DataParallel(net, device_ids=[0,1,2,3])
     net.cuda()
+
 
     if args.eval:
         evaluate(net,eval_dataloader)
 
-    for epoch in range(train_cfg.epochs):
+    for epoch in range(train_cfg.start, train_cfg.epochs):
         log_stream.write('='*30+'Epoch: '+str(epoch+1)+'='*30+'\n')
         optimizer.param_groups[0]['lr'] = (1-abs((epoch+1)/(train_cfg.epochs+1)*2-1))*train_cfg.lr*0.1
         optimizer.param_groups[1]['lr'] = (1-abs((epoch+1)/(train_cfg.epochs+1)*2-1))*train_cfg.lr
 
-        train(net,optimizer,train_dataloader,sw,epoch,train_cfg)
+        train(net, optimizer, train_dataloader, sw, epoch, train_cfg)
 
         if (epoch + 1) % eval_cfg.eval_freq == 0 or epoch == train_cfg.epochs - 1:
 
-            mae = evaluate(net,eval_dataloader)
+            mae, loss = evaluate(net, eval_dataloader)
 
             global best_mae
             is_best = mae < best_mae
-            best_mae = min(mae,best_mae)
+            best_mae = min(mae, best_mae)
 
             save_checkpoints({
-                'epoch':epoch+1,
-                'state_dict':net.state_dict(),
-                'best_mae':best_mae,
-            }, is_best,epoch,train_cfg)
+                'epoch': epoch+1,
+                'state_dict': net.state_dict(),
+                'best_mae': best_mae,
+            }, is_best, epoch, train_cfg)
 
-            log_stream.write('Valid MAE: {:.4f} \n'.format(mae))
+            log_stream.write('Valid MAE: {:.4f} Loss {:.4f}\n'.format(mae, loss))
             log_stream.flush()
 
 
-def evaluate(net,loader):
+def evaluate(net, loader):
+    Loss = 0.0
     mae = cal_mae()
-
     net.eval()
 
     with torch.no_grad():
         for image, mask, shape, name in loader:
             image = image.cuda().float()
+            mask_1 = torch.unsqueeze(mask, dim=0).cuda().float()
             out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
+            loss1u = structure_loss(out1u, mask_1)
+            loss2u = structure_loss(out2u, mask_1)
+
+            loss2r = structure_loss(out2r, mask_1)
+            loss3r = structure_loss(out3r, mask_1)
+            loss4r = structure_loss(out4r, mask_1)
+            loss5r = structure_loss(out5r, mask_1)
+            loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
+
             out = out2u
             pred = (torch.sigmoid(out[0, 0])).cpu().numpy()
 
@@ -173,9 +199,11 @@ def evaluate(net,loader):
             else:
                 pred = (pred - pred.min()) / (pred.max() - pred.min())
             mae.update(pred,mask)
+            Loss += loss
         Mae = mae.show()
 
-    return Mae
+    return Mae, Loss/len(loader)
+
 
 
 def train(net,optimizer,loader,sw,epoch,cfg):

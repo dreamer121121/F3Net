@@ -1,17 +1,44 @@
 import os
 import numpy as np
+<<<<<<< HEAD
 from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm, cal_iou
+=======
+from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm, cal_iou, Eval
+>>>>>>> resnet101
 from PIL import Image
 import torchvision.transforms as transforms
 from multiprocessing import Pool, Lock, Manager, Process
 from multiprocessing.managers import BaseManager
 import multiprocessing
+<<<<<<< HEAD
+=======
+import torch
+>>>>>>> resnet101
 
 dataset_path = '..'  ##gt_path
 
 dataset_path_pre = '..'  ##pre_salmap_path
 
+<<<<<<< HEAD
 test_datasets = ['DUT']  ##test_datasets_name
+=======
+test_datasets = ['test_data']  ##test_datasets_name
+
+
+def parser():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--td',
+                        type=str,
+                        nargs='+',
+                        default=[])
+    parser.add_argument('--scale',
+                        type=int,
+                        default=1,
+                        )
+    args = parser.parse_args()
+    return args
+>>>>>>> resnet101
 
 
 class eval_dataset:
@@ -25,6 +52,7 @@ class eval_dataset:
         self.gt_transform = transforms.ToTensor()
         self.size = len(self.img_list)
         # self.index = 0
+<<<<<<< HEAD
 
     def load_data(self, index):
         # image = self.rgb_loader(self.images[self.index])
@@ -37,6 +65,17 @@ class eval_dataset:
         image = image.resize((w // scale, h // scale))
         gt = gt.resize((w // scale, h // scale))
 
+=======
+
+    def load_data(self, index):
+        # image = self.rgb_loader(self.images[self.index])
+        # self.index = index
+        image = self.binary_loader(os.path.join(self.image_root, self.img_list[index] + '.png'))
+        gt = self.binary_loader(os.path.join(self.gt_root, self.img_list[index] + '.png'))
+        w, h = image.size
+        image = image.resize((w // args.scale, h // args.scale))
+        gt = gt.resize((w // args.scale, h // args.scale))
+>>>>>>> resnet101
         # self.index += 1
         return image, gt
 
@@ -51,6 +90,7 @@ class eval_dataset:
             return img.convert('L')
 
 
+<<<<<<< HEAD
 def run(index, mae, sm, fm, em, wfm, iou):
     # with lock:
     print('predicting for %d / %d' % (index + 1, test_loader.size))
@@ -102,10 +142,21 @@ if __name__ == '__main__':
 
     start = datetime.datetime.now()
     for dataset in test_datasets:
+=======
+if __name__ == '__main__':
+
+    args = parser()
+    import datetime
+
+    start = datetime.datetime.now()
+    for dataset in args.td:
+        print('================eval: '+dataset+'===============')
+>>>>>>> resnet101
         sal_root = dataset_path_pre + '/eval/maps/F3Net/' + dataset
         gt_root = dataset_path + '/data/' + dataset + '/mask/'
         test_loader = eval_dataset(sal_root, gt_root)
 
+<<<<<<< HEAD
         # instance share class
         manager = Manager2()
         mae = manager.cal_mae()
@@ -144,5 +195,36 @@ if __name__ == '__main__':
                                                                                                          MAE, maxf,
                                                                                                          meanf, wfm,
                                                                                                          sm, em, IOU))
+=======
+        metrics = Eval().cuda()
+
+        f = open(dataset + '-eval.txt', 'w')
+
+        for index in range(test_loader.size):
+            print('predicting for %d / %d' % (index + 1, test_loader.size))
+            sal, gt = test_loader.load_data(index)
+            if sal.size != gt.size:
+                x, y = gt.size
+                sal = sal.resize((x, y))
+            gt = np.asarray(gt, np.float32)
+            gt /= (gt.max() + 1e-8)
+            gt[gt > 0.5] = 1
+            gt[gt != 1] = 0
+            res = sal
+            res = np.array(res)
+            if res.max() == res.min():
+                res = res / 255
+            else:
+                res = (res - res.min()) / (res.max() - res.min())
+
+            res, gt = torch.from_numpy(res).cuda().float(), torch.from_numpy(gt).cuda().float()
+            metrics(res, gt)
+
+        MAE, IOU = metrics.show()
+
+        print('dataset: {} MAE: {:.4f} IOU: {:.4f}'.format(dataset, MAE, IOU))
+        f.write(
+            'dataset: {} MAE: {:.4f} IOU: {:.4f}'.format(dataset, MAE, IOU))
+>>>>>>> resnet101
         f.close()
     print(datetime.datetime.now() - start)
