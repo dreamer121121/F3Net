@@ -138,7 +138,6 @@ class Data(Dataset):
 
         if self.cfg.mode=='train':
             image, mask = self.normalize(image, mask)
-            image, mask = self.rotate(image, mask)
             image, mask = self.randomcrop(image, mask)
             image, mask = self.randomflip(image, mask)
             return image, mask
