@@ -56,6 +56,9 @@ def parse_args():
     parser.add_argument('--decay',
                         type=float,
                         default=5e-4)
+    parser.add_argument('--alpha',
+                        type=float,
+                        default=0.5)
     args = parser.parse_args()
 
     return args
@@ -103,7 +106,7 @@ def main(Dataset,Network):
     args = parse_args()
 
     train_cfg = Dataset.Config(datapath='../data/'+args.dataset, savepath='./out_contour', snapshot=args.resume, mode='train', batch=args.batch_size,
-                            lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
+                            lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start, alpha=args.alpha)
 
     eval_cfg =  Dataset.Config(datapath='../data/'+args.dataset, mode='test', eval_freq=1)
 
@@ -227,10 +230,10 @@ def train(net,optimizer,loader,sw,epoch,cfg):
 
         loss_edge = ((loss_e1+loss_e2+loss_e3+loss_e4)/4)*(shape[1]*shape[2])
 
-        print('--sal loss--', loss_sal)
-        print('--edge loss--', loss_edge)
+        print('--sal loss--', loss_sal*cfg.alpha)
+        print('--edge loss--', loss_edge*(1-cfg.alpha))
 
-        loss = loss_sal+loss_edge
+        loss = (cfg.alpha)*loss_sal+(1-cfg.alpha)*loss_edge
 
         optimizer.zero_grad()
         loss.backward()
@@ -240,7 +243,7 @@ def train(net,optimizer,loader,sw,epoch,cfg):
         global global_step
         global_step += 1
         sw.add_scalar('lr'   , optimizer.param_groups[0]['lr'], global_step=global_step)
-        sw.add_scalars('loss', {'loss':loss.item(), 'loss_sal': loss_sal.item(), 'loss_edge': loss_edge.item()}, global_step=global_step)
+        sw.add_scalars('loss', {'loss':loss.item(), 'loss_sal': loss_sal.item()*cfg.alpha, 'loss_edge': loss_edge.item()*(1-cfg.alpha)}, global_step=global_step)
         if step%10 == 0:
             log_stream.write('%s | step:%d/%d/%d | lr=%.6f | loss=%.6f \n'%(datetime.datetime.now(), global_step, epoch+1, cfg.epochs, optimizer.param_groups[0]['lr'], loss.item()))
             log_stream.flush()

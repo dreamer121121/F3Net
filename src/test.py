@@ -110,18 +110,17 @@ class Test(object):
 
             start = datetime.datetime.now()
             input_data = user_image[:,:,::-1].astype(np.float32)
-            shape = [torch.tensor([int(input_data.shape[0])]),torch.tensor([int(input_data.shape[1])])]
+            shape = [torch.tensor([int(input_data.shape[0])]), torch.tensor([int(input_data.shape[1])])]
 
             input_data = normalize(input_data)
             input_data = resize(input_data)
             input_data = totensor(input_data)
-            input_data = input_data[np.newaxis,:,:,:]
+            input_data = input_data[np.newaxis, :, :, :]
 
             image = input_data.to('cuda:1').float()
             user_image = torch.from_numpy(user_image).to('cuda:1').float()
             alpha = torch.ones(user_image.size()[0],user_image.size()[1],1).to('cuda:1')*255
-            user_image = torch.cat((user_image,alpha),dim=2)
-
+            user_image = torch.cat((user_image, alpha), dim=2)
 
             out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
             out = out2u
@@ -146,7 +145,6 @@ class Test(object):
             #             alpha[w][h] = 255  # 看看能否优化速度
             #
             # outimg = np.dstack([outimg, alpha])
-
 
             head  = '../eval/results/F3Net/'+ self.cfg.datapath.split('/')[-1]
 
