@@ -30,7 +30,7 @@ def weight_init(module):
                 nn.init.zeros_(m.bias)
         elif isinstance(m, nn.Sequential):
             weight_init(m)
-        elif isinstance(m, nn.ReLU):
+        elif isinstance(m, nn.ReLU) or isinstance(m, nn.ModuleList):
             pass
         else:
             m.initialize()
@@ -82,10 +82,10 @@ class ResNet(nn.Module):
         out3 = self.layer2(out2)
         out4 = self.layer3(out3)
         out5 = self.layer4(out4)
-        return out2, out3, out4, out5
+        return out1, out2, out3, out4, out5
 
     def initialize(self):
-        self.load_state_dict(torch.load('./resnet50-19c8e357.pth'), strict=False)
+        self.load_state_dict(torch.load('../res/resnet50-19c8e357.pth'), strict=False)
 
 
 class CFM(nn.Module):
@@ -168,6 +168,10 @@ class ConvertLayer(nn.Module):
             resl.append(self.convert0[i](list_x[i]))
         return resl
 
+    def initialize(self):
+        weight_init(self)
+
+
 class ScoreLayer(nn.Module):
     def __init__(self, k):
         super(ScoreLayer, self).__init__()
@@ -178,6 +182,10 @@ class ScoreLayer(nn.Module):
         if x_size is not None:
             x = F.interpolate(x, x_size[2:], mode='bilinear', align_corners=True)
         return x
+
+    def initialize(self):
+        weight_init(self)
+
 
 class F3Net(nn.Module):
     def __init__(self, cfg):
@@ -212,16 +220,16 @@ class F3Net(nn.Module):
         self.initialize()
 
     def forward(self, x, shape=None):
-        out2h, out3h, out4h, out5v        = self.bkbone(x)
-        merge = self.convert([out2h, out3h, out4h, out5v])
+        out1h, out2h, out3h, out4h, out5v        = self.bkbone(x)
+        merge = self.convert([out1h, out2h, out3h, out4h, out5v])[::-1]
         out2h, out3h, out4h, out5v        = self.squeeze2(out2h), self.squeeze3(out3h), self.squeeze4(out4h), self.squeeze5(out5v)
         out2h, out3h, out4h, out5v, pred1 = self.decoder1(out2h, out3h, out4h, out5v)
         out2h, out3h, out4h, out5v, pred2 = self.decoder2(out2h, out3h, out4h, out5v, pred1)
 
-        out_contour1 = self.score_contour1(self.conv_1(merge[1]))
-        out_contour2 = self.score_contour2(self.conv_2(merge[2]))
-        out_contour3 = self.score_contour3(self.conv_3(merge[3]))
-        out_contour4 = self.score_contour4(self.conv_4(merge[4]))
+        out_contour1 = self.score_contour1(self.conv_1(merge[1]), x_size=x.size())
+        out_contour2 = self.score_contour2(self.conv_2(merge[2]), x_size=x.size())
+        out_contour3 = self.score_contour3(self.conv_3(merge[3]), x_size=x.size())
+        out_contour4 = self.score_contour4(self.conv_4(merge[4]), x_size=x.size())
 
         shape = x.size()[2:] if shape is None else shape
         pred1 = F.interpolate(self.linearp1(pred1), size=shape, mode='bilinear')

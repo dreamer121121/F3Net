@@ -128,7 +128,7 @@ class Data(Dataset):
         #print('-----img  name ----',self.cfg.datapath+'/image/'+name+'.jpg')
         image = cv2.imread(self.cfg.datapath+'/image/'+name+'.jpg')[:,:,::-1].astype(np.float32)
         mask  = cv2.imread(self.cfg.datapath+'/mask/' +name+'.png', 0).astype(np.float32)
-        contour  = cv2.imread(self.cfg.datapath+'/contour/' +name+'.png', 0).astype(np.float32)
+        contour  = cv2.imread(self.cfg.datapath+'/contour/' +name+'_edge.png', 0).astype(np.float32)
 
 
         # if len(image.shape) != 3

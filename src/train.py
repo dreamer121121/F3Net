@@ -24,7 +24,7 @@ import argparse
 from saliency_metrics import cal_mae,cal_fm,cal_sm,cal_em,cal_wfm
 
 
-log_stream = open('train.log','a')
+log_stream = open('train_contour.log','a')
 
 global_step = 0
 best_mae = float('inf')
@@ -79,7 +79,7 @@ def structure_loss(pred, mask):
     return (wbce+wiou).mean()
 
 
-def bce2d(input, target, reduction=None):
+def bce2d(input, target, reduction='mean'):
     assert(input.size() == target.size())
     pos = torch.eq(target, 1).float()
     neg = torch.eq(target, 0).float()
@@ -102,7 +102,7 @@ def main(Dataset,Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../data/'+args.dataset, savepath='./out', snapshot=args.resume, mode='train', batch=args.batch_size,
+    train_cfg = Dataset.Config(datapath='../data/'+args.dataset, savepath='./out_contour', snapshot=args.resume, mode='train', batch=args.batch_size,
                             lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
     eval_cfg =  Dataset.Config(datapath='../data/'+args.dataset, mode='test', eval_freq=1)
@@ -111,7 +111,7 @@ def main(Dataset,Network):
 
     eval_data = Dataset.Data(eval_cfg)
 
-    train_dataloader = DataLoader(train_data,collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True, num_workers=16)
+    train_dataloader = DataLoader(train_data, collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True, num_workers=16)
     eval_dataloader =  DataLoader(eval_data, batch_size=1, shuffle=False, num_workers=16)
 
     net    = Network(train_cfg)
@@ -129,7 +129,7 @@ def main(Dataset,Network):
     optimizer      = torch.optim.SGD([{'params': base}, {'params': head}], lr=train_cfg.lr, momentum=train_cfg.momen, weight_decay=train_cfg.decay, nesterov=True)
     sw             = SummaryWriter(train_cfg.savepath)
 
-    net = nn.DataParallel(net, device_ids=[0,1,2,3])
+    net = nn.DataParallel(net, device_ids=[0, 1, 2, 3])
     net.cuda()
 
 
@@ -167,10 +167,10 @@ def evaluate(net, loader):
     net.eval()
 
     with torch.no_grad():
-        for image, mask, shape, name in loader:
+        for image, mask, contour, shape, name in loader:
             image = image.cuda().float()
             mask_1 = torch.unsqueeze(mask, dim=0).cuda().float()
-            out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
+            out1u, out2u, out2r, out3r, out4r, out5r, out_contour1, out_contour2, out_contour3, out_contour4 = net(image, shape)
             loss1u = structure_loss(out1u, mask_1)
             loss2u = structure_loss(out2u, mask_1)
 
@@ -203,8 +203,9 @@ def evaluate(net, loader):
 
 def train(net,optimizer,loader,sw,epoch,cfg):
     net.train()
-    for step, (image, mask,contour) in enumerate(loader):
-        image, mask = image.cuda().float(), mask.cuda().float()
+    for step, (image, mask, contour) in enumerate(loader):
+        shape = contour.size()
+        image, mask, contour = image.cuda().float(), mask.cuda().float(), contour.cuda().float()
         # print(image.shape) #(32,3,320,320)
         # print(mask.shape) #(32,1,320,320)
         # import sys
@@ -224,7 +225,10 @@ def train(net,optimizer,loader,sw,epoch,cfg):
         loss_e3 = bce2d(out_contour3, contour)
         loss_e4 = bce2d(out_contour4, contour)
 
-        loss_edge = loss_e1+loss_e2+loss_e3+loss_e4
+        loss_edge = ((loss_e1+loss_e2+loss_e3+loss_e4)/4)*(shape[1]*shape[2])
+
+        print('--sal loss--', loss_sal)
+        print('--edge loss--', loss_edge)
 
         loss = loss_sal+loss_edge
 
@@ -236,7 +240,7 @@ def train(net,optimizer,loader,sw,epoch,cfg):
         global global_step
         global_step += 1
         sw.add_scalar('lr'   , optimizer.param_groups[0]['lr'], global_step=global_step)
-        sw.add_scalars('loss', {'loss1u':loss1u.item(), 'loss2u':loss2u.item(), 'loss2r':loss2r.item(), 'loss3r':loss3r.item(), 'loss4r':loss4r.item(), 'loss5r':loss5r.item()}, global_step=global_step)
+        sw.add_scalars('loss', {'loss':loss.item(), 'loss_sal': loss_sal.item(), 'loss_edge': loss_edge.item()}, global_step=global_step)
         if step%10 == 0:
             log_stream.write('%s | step:%d/%d/%d | lr=%.6f | loss=%.6f \n'%(datetime.datetime.now(), global_step, epoch+1, cfg.epochs, optimizer.param_groups[0]['lr'], loss.item()))
             log_stream.flush()
