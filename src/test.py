@@ -26,7 +26,6 @@ import pydensecrf.densecrf as dcrf
 import multiprocessing
 from multiprocessing import Pool
 
-multiprocessing.set_start_method('forkserver', force=True)
 
 @torch.no_grad()
 def run(path,normalize,resize,totensor,name, args,id):
@@ -111,6 +110,7 @@ class Test(object):
                 input()
     
     def save(self):
+
         with torch.no_grad():
             import datetime
             #start = datetime.datetime.now()
@@ -125,7 +125,7 @@ class Test(object):
                 start = datetime.datetime.now()
                 out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
                 total += datetime.datetime.now()-start
-                print("inference time: ",(total-datetime.datetime(1999,1,1))/cnt)
+                print("inference time: ", (total-datetime.datetime(1999,1,1))/cnt)
                 out   = out2u
                 pred  = (torch.sigmoid(out[0,0])*255).cpu().numpy()
                 #
@@ -239,6 +239,7 @@ class Test(object):
         return Q
 
     def save_fig(self):
+        multiprocessing.set_start_method('forkserver', force=True)   #bug!!!!
         gpu_index = 0
         normalize = Normalize(mean=self.cfg.mean, std=self.cfg.std)
         resize = Resize(352, 352)
