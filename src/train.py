@@ -23,7 +23,7 @@ import cv2
 
 from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm
 
-log_stream = open('train.log', 'a')
+log_stream = open('train_cortor.log', 'a')
 
 global_step = 0
 best_mae = float('inf')
@@ -98,20 +98,27 @@ def structure_loss(pred, mask):
         f_mask = mask[i, :, :, :]
         f_mask_img = tensor2im(f_mask)
         e_y = cv2.erode(f_mask_img, kernel=kernal, iterations=1)
-        d_y = cv2.dilate(f_mask_img, kernel=kernal, iterations=1)
-        m_c = cv2.GaussianBlur(5 * (d_y - e_y), (5, 5), 0)
+        # d_y = cv2.dilate(f_mask_img, kernel=kernal, iterations=1)
+        m_c = cv2.GaussianBlur(5 * (f_mask_img[:, :, 0] - e_y), (5, 5), 0)
         m_c = m_c[:, :, np.newaxis]
         mc_matrix[i, :, :, :] = m_c[:, :, :]
 
-    L = np.ones((N, W, H, C))
-    M_C = mc_matrix + L
-    M_C = im2tensor(M_C).cuda()
+    # L = np.ones((N, W, H, C))
+    W = np.where(mc_matrix>0, 1, 0)
+    W = im2tensor(W).cuda()
 
-    bce = F.binary_cross_entropy_with_logits(pred, mask, reduction='none')
+    loss_alpha = torch.sqrt(torch.square((mask-torch.sigmoid(pred))*W)+torch.square(torch.Tensor([1e-6]).cuda())).sum(dim=(2, 3)) / W.sum(dim=(2, 3))
 
-    tmp = M_C * bce
+    print('--loss_alpha--', loss_alpha.mean())
+    # cv2.imshow('111', M_C[0])
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
-    cortor_loss = tmp.sum(dim=(2, 3)) / M_C.sum(dim=(2, 3))  # In paper,eqution 5(a little diffenence)
+    # bce = F.binary_cross_entropy_with_logits(pred, mask, reduction='none')
+    #
+    # tmp = M_C * bce
+    #
+    # cortor_loss = tmp.sum(dim=(2, 3)) / M_C.sum(dim=(2, 3))  # In paper,eqution 5(a little diffenence)
     #
     # print('--cortor loss---',cortor_loss.shape)
     # print('---wbce loss---',wbce.shape)
@@ -120,7 +127,12 @@ def structure_loss(pred, mask):
     # import sys
     # sys.exit(0)
 
-    weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask) + M_C
+    # print('---wbce weight---', (5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)).mean())
+    # print('---wcontour weight---', M_C.mean())
+    # import sys
+    # sys.exit(0)
+
+    weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
     wbce = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
     wbce = (weit * wbce).sum(dim=(2, 3)) / weit.sum(dim=(2, 3))
 
@@ -129,14 +141,15 @@ def structure_loss(pred, mask):
     union = ((pred + mask) * weit).sum(dim=(2, 3))
     wiou = 1 - (inter + 1) / (union - inter + 1)
 
-    return (wiou + wbce).mean()
+    return (wiou + wbce+ loss_alpha).mean()
 
 
 def main(Dataset, Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../data/' + args.dataset, savepath='./out', snapshot=args.resume, mode='train',
+    train_cfg = Dataset.Config(datapath='../data/' + args.dataset, savepath='./out_cortor', snapshot=args.resume,
+                               mode='train',
                                batch=args.batch_size,
                                lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
@@ -262,9 +275,7 @@ def train(net, optimizer, loader, sw, epoch, cfg):
         global global_step
         global_step += 1
         sw.add_scalar('lr', optimizer.param_groups[0]['lr'], global_step=global_step)
-        sw.add_scalars('loss', {'loss1u': loss1u.item(), 'loss2u': loss2u.item(), 'loss2r': loss2r.item(),
-                                'loss3r': loss3r.item(), 'loss4r': loss4r.item(), 'loss5r': loss5r.item()},
-                       global_step=global_step)
+        sw.add_scalar('loss', loss.item(), global_step=global_step)
         if step % 10 == 0:
             log_stream.write('%s | step:%d/%d/%d | lr=%.6f | loss=%.6f \n' % (
                 datetime.datetime.now(), global_step, epoch + 1, cfg.epochs, optimizer.param_groups[0]['lr'],
