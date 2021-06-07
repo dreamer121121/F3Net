@@ -59,25 +59,25 @@ class Test(object):
             import datetime
             #start = datetime.datetime.now()
             cnt = 1
-<<<<<<< Updated upstream
+
             total = datetime.datetime(1999,1,1)
-=======
+
             total = datetime.datetime(1999, 1, 1)
             print('--type(self.loader--)', type(self.loader))
 
->>>>>>> Stashed changes
+
             for image, mask, shape, name in self.loader:
                 # print(np.where(mask>0.5))
                 # import sys
                 # sys.exit(0)
                 #image.shape (1,3,352,352)
                 #shape: init img shape ,which is for pre_mask to match the size of init img
-<<<<<<< Updated upstream
+
                 image = image.cuda().float()
-=======
+
                 print(image)
                 image = image.to('cuda:1').float()
->>>>>>> Stashed changes
+
                 start = datetime.datetime.now()
                 out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
                 total += datetime.datetime.now()-start
@@ -103,14 +103,12 @@ class Test(object):
 
         fr.close()
 
-<<<<<<< Updated upstream
-=======
         import datetime
         cnt = 1
         total = datetime.datetime(1999, 1, 1)
         import segmentation_refinement as refine
         refiner = refine.Refiner(device='cuda:1')
->>>>>>> Stashed changes
+
         for name in file_list:
 
             name = name.replace('\n','')
@@ -123,18 +121,16 @@ class Test(object):
             input_data = totensor(input_data)
             input_data = input_data[np.newaxis,:,:,:]
 
-<<<<<<< Updated upstream
             image = input_data.cuda().float()
 
-=======
             image = input_data.to('cuda:1').float()
->>>>>>> Stashed changes
+
             out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
             out = out2u
 
-<<<<<<< Updated upstream
+
             pred = (torch.sigmoid(out[0, 0]) * 255).cpu().detach().numpy()
-=======
+
             mask = (torch.sigmoid(out2u[0, 0]) * 255).cpu().numpy()
             # if args.crf:
             #     Q = self.dense_crf(user_image.astype(np.uint8), pred.cpu().numpy())
@@ -158,7 +154,7 @@ class Test(object):
             outimg = np.multiply(user_image, mask[:, :, np.newaxis]/255)
 
             del mask, out1u, out2u, out2r, out3r, out4r, out5r
->>>>>>> Stashed changes
+
 
 
             mask = np.zeros(shape=(pred.shape[0],pred.shape[1],3))
