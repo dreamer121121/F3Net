@@ -195,7 +195,7 @@ class F3Net(nn.Module):
         if self.cfg.snapshot: #finetune
             if os.path.isfile(self.cfg.snapshot):
                 print('=> loading checkpoint {} \n'.format(self.cfg.snapshot))
-            checkpoints = torch.load(self.cfg.snapshot)
+            checkpoints = torch.load(self.cfg.snapshot)['state_dict']
             #checkpoints = torch.load(self.cfg.snapshot)
             fielter_checkpoints = dict()
             for k,v in checkpoints.items():

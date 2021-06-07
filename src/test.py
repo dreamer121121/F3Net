@@ -205,7 +205,7 @@ class Test(object):
             #
             # outimg = np.dstack([outimg, alpha])
 
-            head = '../eval/results/F3Net/' + self.cfg.datapath.split('/')[-1]
+            head = '../eval/result/F3Net/' + self.cfg.datapath.split('/')[-1]
 
             if not os.path.exists(head):
                 os.makedirs(head)
