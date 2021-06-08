@@ -187,10 +187,14 @@ class Test(object):
             #     sys.exit(0)
             if args.erd:
                 ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
-                kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (50, 50))
 
-                mask = cv2.erode(img_thr, kernal, iterations=1)
-                mask = cv2.dilate(mask, kernal, iterations=1)
+                mask = cv2.blur(img_thr, (3, 3))
+
+                # kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+                #
+                # mask = cv2.erode(mask, kernal, iterations=1)
+                #
+                # mask = cv2.dilate(mask, kernal, iterations=1)
 
             outimg = np.multiply(user_image, mask[:, :, np.newaxis]/255)
 
