@@ -138,7 +138,6 @@ class Data(Dataset):
 
         if self.cfg.mode=='train':
             image, mask = self.normalize(image, mask)
-            image, mask = self.rotate(image, mask)
             image, mask = self.randomcrop(image, mask)
             image, mask = self.randomflip(image, mask)
             return image, mask
@@ -149,7 +148,7 @@ class Data(Dataset):
             return image, mask, shape, name
 
     def collate(self, batch):
-        size = [224, 256, 288, 320, 352][np.random.randint(0, 5)]
+        size = [224, 256, 288, 320, 352, 384, 416][np.random.randint(0, 7)]
         image, mask = [list(item) for item in zip(*batch)]
         for i in range(len(batch)):
             try:
