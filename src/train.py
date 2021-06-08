@@ -19,9 +19,9 @@ import dataset
 from net import F3Net
 import shutil
 import argparse
-import cv2
 
 from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm
+from .smoothing import gaussian_blur
 
 log_stream = open('train_cortor.log', 'a')
 
@@ -67,81 +67,38 @@ def save_checkpoints(state, is_best, epoch, cfg):
                         '%s/%s_best.pth.tar' % (os.path.join(cfg.savepath), 'model'))
 
 
-def tensor2im(image_tensor, imtype=np.uint8, normalize=True):
-    image_numpy = image_tensor.cpu().float().detach().numpy()
-    # print(image_numpy.shape)
-    # blank_image = np.zeros((image_tensor.shape[1],image_tensor.shape[2],image_tensor.shape[0]), np.uint8)
 
-    blank_image = image_numpy.reshape(image_tensor.shape[1], image_tensor.shape[2], image_tensor.shape[0])
+def structure_loss(pred, target):
 
-    return blank_image
+    def masked_l1_loss(y_hat, y, mask):
+        loss = F.l1_loss(y_hat, y, reduction='none')
+        loss = (loss * mask.float()).sum()
+        non_zero_elements = mask.sum()
+        return loss / non_zero_elements
 
+    shape = target.shape
+    mask = target[:, 0] # target:N, W, H
+    smoothed_mask = gaussian_blur(
+        mask.unsqueeze(dim=1), (9, 9), (2.5, 2.5)).squeeze(dim=1)
+    unknown_mask = target[:, 1]
 
-def im2tensor(image_numpy):
-    image_tensor = torch.Tensor(image_numpy)
-    (N, W, H, C) = image_tensor.size()
-    res = image_tensor.view((N, C, W, H))
+    l1_mask = torch.ones(mask.shape)
+    l1_details_mask = torch.zeros(mask.shape)
 
-    return res
+    for idx in range(shape[0]):
+        l1_details_mask[idx] = unknown_mask[idx]
 
+    loss = 0
+    loss += 2 * masked_l1_loss(F.sigmoid(pred), mask, l1_mask)
+    # this loss should give some learning signals to focus on unknown areas
+    loss += 3 * masked_l1_loss(F.sigmoid(pred), mask, l1_details_mask)
+    # i'm not quite sure if this loss gives the right incentive, the idea
+    # is to blur the segmentation mask a bit to reduce background bleeding
+    # caused by bad labels, preliminary results seem to be quite ok.
+    loss += F.mse_loss(F.sigmoid(pred), smoothed_mask)
 
-def structure_loss(pred, mask):
-    # wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
-    # wbce  = (weit*wbce).sum(dim=(2,3))/weit.sum(dim=(2,3))
-    #
+    return loss
 
-    # add cortor loss
-    N, C, W, H = mask.shape
-    kernal = np.ones((5, 5), np.uint8)
-    mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
-    for i in range(N):
-        f_mask = mask[i, :, :, :]
-        f_mask_img = tensor2im(f_mask)
-        e_y = cv2.erode(f_mask_img, kernel=kernal, iterations=1)
-        # d_y = cv2.dilate(f_mask_img, kernel=kernal, iterations=1)
-        m_c = cv2.GaussianBlur(5 * (f_mask_img[:, :, 0] - e_y), (5, 5), 0)
-        m_c = m_c[:, :, np.newaxis]
-        mc_matrix[i, :, :, :] = m_c[:, :, :]
-
-    # L = np.ones((N, W, H, C))
-    W = np.where(mc_matrix>0, 1, 0)
-    W = im2tensor(W).cuda()
-
-    loss_alpha = torch.sqrt(torch.square((mask-torch.sigmoid(pred))*W)+torch.square(torch.Tensor([1e-6]).cuda())).sum(dim=(2, 3)) / W.sum(dim=(2, 3))
-
-    print('--loss_alpha--', loss_alpha.mean())
-    # cv2.imshow('111', M_C[0])
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
-
-    # bce = F.binary_cross_entropy_with_logits(pred, mask, reduction='none')
-    #
-    # tmp = M_C * bce
-    #
-    # cortor_loss = tmp.sum(dim=(2, 3)) / M_C.sum(dim=(2, 3))  # In paper,eqution 5(a little diffenence)
-    #
-    # print('--cortor loss---',cortor_loss.shape)
-    # print('---wbce loss---',wbce.shape)
-    # print('---wiou loss---',wiou.shape)
-    # print(cortor_loss)
-    # import sys
-    # sys.exit(0)
-
-    # print('---wbce weight---', (5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)).mean())
-    # print('---wcontour weight---', M_C.mean())
-    # import sys
-    # sys.exit(0)
-
-    weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
-    wbce = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
-    wbce = (weit * wbce).sum(dim=(2, 3)) / weit.sum(dim=(2, 3))
-
-    pred = torch.sigmoid(pred)
-    inter = ((pred * mask) * weit).sum(dim=(2, 3))
-    union = ((pred + mask) * weit).sum(dim=(2, 3))
-    wiou = 1 - (inter + 1) / (union - inter + 1)
-
-    return (wiou + wbce+ loss_alpha).mean()
 
 
 def main(Dataset, Network):
@@ -251,20 +208,20 @@ def evaluate(net, loader):
 
 def train(net, optimizer, loader, sw, epoch, cfg):
     net.train()
-    for step, (image, mask) in enumerate(loader):
-        image, mask = image.cuda().float(), mask.cuda().float()
+    for step, (image, target) in enumerate(loader):
+        image, target = image.cuda().float(), target.cuda().float()
         # print(image.shape) #(32,3,320,320)
         # print(mask.shape) #(32,1,320,320)
         # import sys
         # sys.exit(0)
         out1u, out2u, out2r, out3r, out4r, out5r = net(image)
-        loss1u = structure_loss(out1u, mask)
-        loss2u = structure_loss(out2u, mask)
+        loss1u = structure_loss(out1u, target)
+        loss2u = structure_loss(out2u, target)
 
-        loss2r = structure_loss(out2r, mask)
-        loss3r = structure_loss(out3r, mask)
-        loss4r = structure_loss(out4r, mask)
-        loss5r = structure_loss(out5r, mask)
+        loss2r = structure_loss(out2r, target)
+        loss3r = structure_loss(out3r, target)
+        loss4r = structure_loss(out4r, target)
+        loss5r = structure_loss(out5r, target)
         loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
 
         optimizer.zero_grad()

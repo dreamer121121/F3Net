@@ -6,6 +6,7 @@ import cv2
 import torch
 import numpy as np
 from torch.utils.data import Dataset
+from PIL import Image
 
 ########################### Data Augmentation ###########################
 class Normalize(object):
@@ -118,12 +119,35 @@ class Data(Dataset):
             image, mask = self.normalize(image, mask)
             image, mask = self.randomcrop(image, mask)
             image, mask = self.randomflip(image, mask)
-            return image, mask
+            background, unknown, foreground = self.generate_trimap(mask)
+            target = np.array(Image.merge('RGB', (mask, unknown, foreground)))/255
+            return image, target
         else:
             image, mask = self.normalize(image, mask)
             image, mask = self.resize(image, mask, self.cfg.mode)
             image, mask = self.totensor(image, mask)
             return image, mask, shape, name
+
+    def generate_trimap(self, mask):
+        dilation_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
+        dilated = cv2.dilate(mask, dilation_kernel, iterations=5)
+
+        erosion_kernel = np.ones((3, 3), np.uint8)
+        eroded = cv2.erode(mask, erosion_kernel, iterations=3)
+
+        background = np.zeros(mask.shape, dtype=np.uint8)
+        background[dilated < 128] = 255
+
+        unknown = np.zeros(mask.shape, dtype=np.uint8)
+        unknown.fill(255)
+        unknown[eroded > 128] = 0
+        unknown[dilated < 128] = 0
+
+        foreground = np.zeros(mask.shape, dtype=np.uint8)
+        foreground[eroded > 128] = 255
+
+        return background, unknown, foreground
+
 
     def collate(self, batch):
         size = [224, 256, 288, 320, 352][np.random.randint(0, 5)]
@@ -138,6 +162,7 @@ class Data(Dataset):
         image = torch.from_numpy(np.stack(image, axis=0)).permute(0,3,1,2)
         mask  = torch.from_numpy(np.stack(mask, axis=0)).unsqueeze(1)
         return image, mask
+
 
     def __len__(self):
         return len(self.samples)
