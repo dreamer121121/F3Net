@@ -82,16 +82,16 @@ def structure_loss(pred, target):
         mask.unsqueeze(dim=1), (9, 9), (2.5, 2.5)).squeeze(dim=1)
     unknown_mask = target[:, 1]
 
-    l1_mask = torch.ones(mask.shape)
-    l1_details_mask = torch.zeros(mask.shape)
+    l1_mask = torch.ones(mask.shape).cuda()
+    l1_details_mask = torch.zeros(mask.shape).cuda()
 
     for idx in range(shape[0]):
         l1_details_mask[idx] = unknown_mask[idx]
 
     loss = 0
-    loss += 2 * masked_l1_loss(F.sigmoid(pred), mask, l1_mask)
+    loss += 2 * masked_l1_loss(F.sigmoid(pred), mask.unsqueeze(dim=1), l1_mask)
     # this loss should give some learning signals to focus on unknown areas
-    loss += 3 * masked_l1_loss(F.sigmoid(pred), mask, l1_details_mask)
+    loss += 3 * masked_l1_loss(F.sigmoid(pred), mask.unsqueeze(dim=1), l1_details_mask)
     # i'm not quite sure if this loss gives the right incentive, the idea
     # is to blur the segmentation mask a bit to reduce background bleeding
     # caused by bad labels, preliminary results seem to be quite ok.

@@ -116,12 +116,14 @@ class Data(Dataset):
         shape = mask.shape
 
         if self.cfg.mode=='train':
-            image, mask = self.normalize(image, mask)
-            image, mask = self.randomcrop(image, mask)
-            image, mask = self.randomflip(image, mask)
             background, unknown, foreground = self.generate_trimap(mask)
-            target = np.array(Image.merge('RGB', (mask, unknown, foreground)))/255
+            target = np.stack((mask, unknown, foreground), axis=2)
+            image, target = self.normalize(image, target)
+            image, target = self.randomcrop(image, target)
+            image, target = self.randomflip(image, target)
+
             return image, target
+
         else:
             image, mask = self.normalize(image, mask)
             image, mask = self.resize(image, mask, self.cfg.mode)
@@ -151,17 +153,17 @@ class Data(Dataset):
 
     def collate(self, batch):
         size = [224, 256, 288, 320, 352][np.random.randint(0, 5)]
-        image, mask = [list(item) for item in zip(*batch)]
+        image, target = [list(item) for item in zip(*batch)]
         for i in range(len(batch)):
             try:
                 image[i] = cv2.resize(image[i], dsize=(size, size), interpolation=cv2.INTER_LINEAR)
-                mask[i]  = cv2.resize(mask[i],  dsize=(size, size), interpolation=cv2.INTER_LINEAR)
+                target[i]  = cv2.resize(target[i],  dsize=(size, size), interpolation=cv2.INTER_LINEAR)
             except:
                 print("name: ",self.name)
-                print("maks.shape: ",mask[i].shape)
-        image = torch.from_numpy(np.stack(image, axis=0)).permute(0,3,1,2)
-        mask  = torch.from_numpy(np.stack(mask, axis=0)).unsqueeze(1)
-        return image, mask
+                print("maks.shape: ",target[i].shape)
+        image = torch.from_numpy(np.stack(image, axis=0)).permute(0, 3, 1, 2)
+        target  = torch.from_numpy(np.stack(target, axis=0)).permute(0, 3, 1, 2)
+        return image, target
 
 
     def __len__(self):
