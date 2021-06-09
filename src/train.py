@@ -103,7 +103,14 @@ def generate_trimap(mask):
     foreground = np.zeros(mask.shape, dtype=np.uint8)
     foreground[eroded > 128] = 255
 
-    return unknown
+    # cv2.imshow('111', foreground)
+    # cv2.imshow('222', unknown)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    # import sys
+    # sys.exit(0)
+
+    return unknown/255
 
 
 def structure_loss(pred, mask):
@@ -118,7 +125,7 @@ def structure_loss(pred, mask):
     for i in range(N):
         f_mask = mask[i, :, :, :]
         f_mask_img = tensor2im(f_mask)
-        transition = generate_trimap(f_mask_img)
+        transition = generate_trimap(f_mask_img*255)
         mc_matrix[i, :, :, :] = transition[:, :, :]
 
     W = im2tensor(mc_matrix).cuda()
@@ -126,27 +133,6 @@ def structure_loss(pred, mask):
     loss_alpha = torch.sqrt(torch.square((mask-torch.sigmoid(pred))*W)+torch.square(torch.Tensor([1e-6]).cuda())).sum(dim=(2, 3)) / W.sum(dim=(2, 3))
 
     print('--loss_alpha--', loss_alpha.mean())
-    # cv2.imshow('111', M_C[0])
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
-
-    # bce = F.binary_cross_entropy_with_logits(pred, mask, reduction='none')
-    #
-    # tmp = M_C * bce
-    #
-    # cortor_loss = tmp.sum(dim=(2, 3)) / M_C.sum(dim=(2, 3))  # In paper,eqution 5(a little diffenence)
-    #
-    # print('--cortor loss---',cortor_loss.shape)
-    # print('---wbce loss---',wbce.shape)
-    # print('---wiou loss---',wiou.shape)
-    # print(cortor_loss)
-    # import sys
-    # sys.exit(0)
-
-    # print('---wbce weight---', (5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)).mean())
-    # print('---wcontour weight---', M_C.mean())
-    # import sys
-    # sys.exit(0)
 
     weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
     wbce = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
