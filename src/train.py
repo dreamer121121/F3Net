@@ -85,6 +85,27 @@ def im2tensor(image_numpy):
     return res
 
 
+def generate_trimap(mask):
+    dilation_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
+    dilated = cv2.dilate(mask, dilation_kernel, iterations=5)
+
+    erosion_kernel = np.ones((3, 3), np.uint8)
+    eroded = cv2.erode(mask, erosion_kernel, iterations=3)
+
+    background = np.zeros(mask.shape, dtype=np.uint8)
+    background[dilated < 128] = 255
+
+    unknown = np.zeros(mask.shape, dtype=np.uint8)
+    unknown.fill(255)
+    unknown[eroded > 128] = 0
+    unknown[dilated < 128] = 0
+
+    foreground = np.zeros(mask.shape, dtype=np.uint8)
+    foreground[eroded > 128] = 255
+
+    return unknown
+
+
 def structure_loss(pred, mask):
     # wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
     # wbce  = (weit*wbce).sum(dim=(2,3))/weit.sum(dim=(2,3))
@@ -92,20 +113,15 @@ def structure_loss(pred, mask):
 
     # add cortor loss
     N, C, W, H = mask.shape
-    kernal = np.ones((5, 5), np.uint8)
+
     mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
     for i in range(N):
         f_mask = mask[i, :, :, :]
         f_mask_img = tensor2im(f_mask)
-        e_y = cv2.erode(f_mask_img, kernel=kernal, iterations=1)
-        # d_y = cv2.dilate(f_mask_img, kernel=kernal, iterations=1)
-        m_c = cv2.GaussianBlur(5 * (f_mask_img[:, :, 0] - e_y), (5, 5), 0)
-        m_c = m_c[:, :, np.newaxis]
-        mc_matrix[i, :, :, :] = m_c[:, :, :]
+        transition = generate_trimap(f_mask_img)
+        mc_matrix[i, :, :, :] = transition[:, :, :]
 
-    # L = np.ones((N, W, H, C))
-    W = np.where(mc_matrix>0, 1, 0)
-    W = im2tensor(W).cuda()
+    W = im2tensor(mc_matrix).cuda()
 
     loss_alpha = torch.sqrt(torch.square((mask-torch.sigmoid(pred))*W)+torch.square(torch.Tensor([1e-6]).cuda())).sum(dim=(2, 3)) / W.sum(dim=(2, 3))
 
@@ -141,7 +157,7 @@ def structure_loss(pred, mask):
     union = ((pred + mask) * weit).sum(dim=(2, 3))
     wiou = 1 - (inter + 1) / (union - inter + 1)
 
-    return (wiou + wbce+ loss_alpha).mean()
+    return (wiou + wbce + loss_alpha).mean()
 
 
 def main(Dataset, Network):
