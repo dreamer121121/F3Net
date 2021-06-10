@@ -24,7 +24,7 @@ from transform import *
 class Test(object):
     def __init__(self, Dataset, Network, path):
         ## dataset
-        self.cfg    = Dataset.Config(datapath=path, snapshot='./out/model_best.pth.tar', mode='test')
+        self.cfg    = Dataset.Config(datapath=path, snapshot='./out_cortor/model_best.pth.tar', mode='test')
         self.data   = Dataset.Data(self.cfg)
         self.loader = DataLoader(self.data, batch_size=1, shuffle=False, num_workers=8)
         ## network
@@ -75,8 +75,7 @@ class Test(object):
 
                 image = image.cuda().float()
 
-                print(image)
-                image = image.to('cuda:1').float()
+                image = image.to('cuda:0').float()
 
                 start = datetime.datetime.now()
                 out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
@@ -198,7 +197,7 @@ if __name__=='__main__':
     args = parser.parse_args()
     # for path in ['../data/allbody_base']:
     #     print("path:",path)
-    t = Test(dataset, F3Net, args.dataset)
+    t = Test(dataset, F3Net, '../data/'+args.dataset)
     if args.mode == 'mask':
         t.save()
     elif args.mode == 'fig':
