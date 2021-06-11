@@ -130,12 +130,15 @@ def structure_loss(pred, mask):
 
     W = im2tensor(mc_matrix).cuda()
     tmp = []
+    loss = 0
     for i in range(N):
         cur = W[i]
         if cur.sum() != 0:
-            tmp.append(torch.sqrt(torch.square(abs(mask[i]-F.sigmoid(pred[i]))*cur)+torch.square(torch.Tensor([1e-6]).cuda())).sum() / W.sum())
+            loss = (torch.sqrt(torch.square(abs(mask[i]-F.sigmoid(pred[i]))*cur)+torch.square(torch.Tensor([1e-6]).cuda())).sum() / W.sum()).unsqueeze(-1)
         else:
-            tmp.append(torch.Tensor([0]).cuda())
+            loss = torch.Tensor([0]).cuda()
+        print('---loss.size()---', loss.size())
+        tmp.append(loss)
 
     loss_alpha = 10*(torch.stack(tmp).unsqueeze(dim=1))
 
