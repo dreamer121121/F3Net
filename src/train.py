@@ -61,22 +61,16 @@ def parse_args():
     return args
 
 
-def save_checkpoints(state, is_best, epoch,cfg):
+def save_checkpoints(state, is_best, epoch, cfg):
     torch.save(state, '%s/%s_%dcheckpoint.pth.tar' % (os.path.join(cfg.savepath), 'model',epoch))
     if is_best:
         shutil.copyfile('%s/%s_%dcheckpoint.pth.tar' % (os.path.join(cfg.savepath), 'model',epoch),'%s/%s_best.pth.tar' % (os.path.join(cfg.savepath), 'model'))
 
 
-def structure_loss(pred, mask):
-    weit  = 1+5*torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15)-mask)
-    wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
-    wbce  = (weit*wbce).sum(dim=(2,3))/weit.sum(dim=(2,3))
+def criterion(pred,target):
+    metric = nn.CrossEntropyLoss()
 
-    pred  = torch.sigmoid(pred)
-    inter = ((pred*mask)*weit).sum(dim=(2,3))
-    union = ((pred+mask)*weit).sum(dim=(2,3))
-    wiou  = 1-(inter+1)/(union-inter+1)
-    return (wbce+wiou).mean()
+    return metric(pred, target)
 
 
 def mixup_data(x, y, alpha=1.0, use_cuda=True):
@@ -205,26 +199,13 @@ def evaluate(net, loader):
     return Mae, Loss/len(loader)
 
 
-
 def train(net,optimizer,loader,sw,epoch,cfg):
     net.train()
-    for step, (image, mask) in enumerate(loader):
-        image, mask = image.cuda().float(), mask.cuda().float()
+    for step, (image, label) in enumerate(loader):
+        image = image.cuda().float()
 
-        # image,mask_a,mask_b = mixup_data(image,mask,use_cuda=)
-        # print(image.shape) #(32,3,320,320)
-        # print(mask.shape) #(32,1,320,320)
-        # import sys
-        # sys.exit(0)
-        out1u, out2u, out2r, out3r, out4r, out5r = net(image)
-        loss1u = structure_loss(out1u, mask)
-        loss2u = structure_loss(out2u, mask)
-
-        loss2r = structure_loss(out2r, mask)
-        loss3r = structure_loss(out3r, mask)
-        loss4r = structure_loss(out4r, mask)
-        loss5r = structure_loss(out5r, mask)
-        loss   = (loss1u+loss2u)/2+loss2r/2+loss3r/4+loss4r/8+loss5r/16
+        out = net(image)
+        loss = criterion(out, label)
 
         optimizer.zero_grad()
         loss.backward()
@@ -234,7 +215,7 @@ def train(net,optimizer,loader,sw,epoch,cfg):
         global global_step
         global_step += 1
         sw.add_scalar('lr'   , optimizer.param_groups[0]['lr'], global_step=global_step)
-        sw.add_scalars('loss', {'loss1u':loss1u.item(), 'loss2u':loss2u.item(), 'loss2r':loss2r.item(), 'loss3r':loss3r.item(), 'loss4r':loss4r.item(), 'loss5r':loss5r.item()}, global_step=global_step)
+        sw.add_scalars('loss', loss.item(), global_step=global_step)
         if step%10 == 0:
             log_stream.write('%s | step:%d/%d/%d | lr=%.6f | loss=%.6f \n'%(datetime.datetime.now(), global_step, epoch+1, cfg.epochs, optimizer.param_groups[0]['lr'], loss.item()))
             log_stream.flush()
