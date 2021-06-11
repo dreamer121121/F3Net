@@ -85,47 +85,65 @@ def im2tensor(image_numpy):
     return res
 
 
+def generate_trimap(mask):
+    dilation_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
+    dilated = cv2.dilate(mask, dilation_kernel, iterations=5)
+
+    erosion_kernel = np.ones((3, 3), np.uint8)
+    eroded = cv2.erode(mask, erosion_kernel, iterations=3)
+
+    background = np.zeros(mask.shape, dtype=np.uint8)
+    background[dilated < 128] = 255
+
+    unknown = np.zeros(mask.shape, dtype=np.uint8)
+    unknown.fill(255)
+    unknown[eroded > 128] = 0
+    unknown[dilated < 128] = 0
+
+    foreground = np.zeros(mask.shape, dtype=np.uint8)
+    foreground[eroded > 128] = 255
+
+    # cv2.imshow('111', foreground)
+    # cv2.imshow('222', unknown)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    # import sys
+    # sys.exit(0)
+
+    return unknown / 255
+
+
 def structure_loss(pred, mask):
-    weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
     # wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
     # wbce  = (weit*wbce).sum(dim=(2,3))/weit.sum(dim=(2,3))
+    #
+
+    # add cortor loss
+    N, C, W, H = mask.shape
+
+    mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
+    for i in range(N):
+        f_mask = mask[i, :, :, :]
+        f_mask_img = tensor2im(f_mask)
+        transition = generate_trimap(f_mask_img*255)
+        mc_matrix[i, :, :, :] = transition[:, :, :]
+
+    W = im2tensor(mc_matrix).cuda()
+
+    loss_alpha = torch.sqrt(torch.square((mask-torch.sigmoid(pred))*W)+torch.square(torch.Tensor([1e-6]).cuda())).sum(dim=(2, 3)) / W.sum(dim=(2, 3))
+
+    print('--loss_alpha--', loss_alpha.mean())
+
+    weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
+    wbce = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
+    wbce = (weit * wbce).sum(dim=(2, 3)) / weit.sum(dim=(2, 3))
 
     pred = torch.sigmoid(pred)
     inter = ((pred * mask) * weit).sum(dim=(2, 3))
     union = ((pred + mask) * weit).sum(dim=(2, 3))
     wiou = 1 - (inter + 1) / (union - inter + 1)
 
-    # add cortor loss
-    N, C, W, H = mask.shape
-    kernal = np.ones((5, 5), np.uint8)
-    mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
-    for i in range(N):
-        f_mask = mask[i, :, :, :]
-        f_mask_img = tensor2im(f_mask)
-        e_y = cv2.erode(f_mask_img, kernel=kernal, iterations=1)
-        d_y = cv2.dilate(f_mask_img, kernel=kernal, iterations=1)
-        m_c = cv2.GaussianBlur(5 * (d_y - e_y), (5, 5), 0)
-        m_c = m_c[:, :, np.newaxis]
-        mc_matrix[i, :, :, :] = m_c[:, :, :]
-
-    L = np.ones((N, W, H, C))
-    M_C = mc_matrix + L
-    M_C = im2tensor(M_C).cuda()
-
-    bce = F.binary_cross_entropy_with_logits(pred, mask, reduction='none')
-
-    tmp = M_C * bce
-
-    cortor_loss = tmp.sum(dim=(2, 3)) / M_C.sum(dim=(2, 3))
-    #
-    # print('--cortor loss---',cortor_loss.shape)
-    # print('---wbce loss---',wbce.shape)
-    # print('---wiou loss---',wiou.shape)
-    # print(cortor_loss)
-    # import sys
-    # sys.exit(0)
-
-    return (wiou + cortor_loss).mean()
+    return (wiou + wbce + loss_alpha).mean()
 
 
 def main(Dataset, Network):
@@ -263,7 +281,8 @@ def train(net, optimizer, loader, sw, epoch, cfg):
                        global_step=global_step)
         if step % 10 == 0:
             log_stream.write('%s | step:%d/%d/%d | lr=%.6f | loss=%.6f \n' % (
-            datetime.datetime.now(), global_step, epoch + 1, cfg.epochs, optimizer.param_groups[0]['lr'], loss.item()))
+                datetime.datetime.now(), global_step, epoch + 1, cfg.epochs, optimizer.param_groups[0]['lr'],
+                loss.item()))
             log_stream.flush()
 
 
