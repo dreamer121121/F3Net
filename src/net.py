@@ -32,7 +32,7 @@ class Bottleneck(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self,num_classes):
+    def __init__(self, num_classes):
         super(ResNet, self).__init__()
         self.inplanes = 64
         self.conv1    = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -43,7 +43,7 @@ class ResNet(nn.Module):
         self.layer4   = self.make_layer(512, 3, stride=2, dilation=1)
         self.initialize()
 
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Linear(512 * 4, num_classes)
 
     def make_layer(self, planes, blocks, stride, dilation):
@@ -61,31 +61,34 @@ class ResNet(nn.Module):
         out3 = self.layer2(out2)
         out4 = self.layer3(out3)
         out5 = self.layer4(out4)
-        out = self.avgpool(out5)
+        out = self.avgpool(out5).view(-1, 2048)
+        print(out.size())
+
         out = self.fc(out)
+
         return out
 
     def initialize(self):
         self.load_state_dict(torch.load('../res/resnet101-5d3b4d8f.pth'), strict=False)
 
-import torchvision.datasets as dest
-
-class Data(dest):
-    def __init__(self):
-        super(Data, self).__init__()
-        pass
-    def __getitem__(self, item):
 
 if __name__ == '__main__':
-    model = ResNet()
-    model.eval()
-    Input = torch.randn((1, 3, 352, 352))
-    for i in range(100):
-        out = model(Input)
-        print(out)
+    # model = ResNet()
+    # model.eval()
+    # Input = torch.randn((1, 3, 352, 352))
+    # for i in range(100):
+    #     out = model(Input)
+    #     print(out)
     # from thop import profile, clever_format
     # flops, params = profile(model, inputs=(Input,))
     # flops, params = clever_format([flops, params], '%.3f')
     # print("flops {}, params {}".format(flops, params))
+    dataset = Data('../../class_data/')
+    # print(dataset.classes)
+    # print(dataset.class_to_idx)
+    # print(dataset.imgs)
+    print(dataset[0])
+
+
 
 

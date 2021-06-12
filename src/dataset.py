@@ -6,6 +6,8 @@ import cv2
 import torch
 import numpy as np
 from torch.utils.data import Dataset
+import torchvision.datasets as dest
+
 
 ########################### Data Augmentation ###########################
 class Normalize(object):
@@ -100,37 +102,34 @@ class Config(object):
         else:
             return None
 
+
 #f = open('error_sample.txt','w')
 ########################### Dataset Class ###########################
-class Data(Dataset):
+class Data(dest.ImageFolder):
     def __init__(self, cfg):
-        self.cfg        = cfg
+        super(Data, self).__init__(cfg.datapath)
+        self.cfg = cfg
         self.normalize  = Normalize(mean=cfg.mean, std=cfg.std)
         self.randomcrop = RandomCrop()
         self.randomflip = RandomFlip()
         self.resize     = Resize(352, 352)
         self.totensor   = ToTensor()
         self.rotate     = Rotate()
-        with open(cfg.datapath+'/'+cfg.mode+'.txt', 'r') as lines:
-            self.samples = []
-            for line in lines:
-                self.samples.append(line.strip())
 
     def __getitem__(self, idx):
-        name  = self.samples[idx]
-        self.name = name
+        img_path, label  = self.imgs[idx]
         #print('-----img  name ----',self.cfg.datapath+'/image/'+name+'.jpg')
-        image = cv2.imread(self.cfg.datapath+'/image/'+name+'.jpg')[:,:,::-1].astype(np.float32)
+        image = cv2.imread(img_path)[:, :, ::-1].astype(np.float32)
 
         image = self.normalize(image)
         image = self.randomcrop(image)
         image = self.rotate(image)
         image = self.randomflip(image)
-        return image
+        return image, label
 
     def collate(self, batch):
         size = [224, 256, 288, 320, 352, 384, 416][np.random.randint(0, 7)]
-        image = [list(item) for item in zip(*batch)]
+        image, label = [list(item) for item in zip(*batch)]
         for i in range(len(batch)):
             try:
                 image[i] = cv2.resize(image[i], dsize=(size, size), interpolation=cv2.INTER_LINEAR)
@@ -138,24 +137,28 @@ class Data(Dataset):
                 print("name: ", self.name)
 
         image = torch.from_numpy(np.stack(image, axis=0)).permute(0, 3, 1, 2)
-        return image
+        label = torch.from_numpy(np.stack(label, axis=0))
+        return image, label
 
     def __len__(self):
         return len(self.samples)
 
 
 ########################### Testing Script ###########################
-if __name__=='__main__':
-    import matplotlib.pyplot as plt
-    plt.ion()
-
-    cfg  = Config(mode='train', datapath='../data/DUTS')
-    data = Data(cfg)
-    for i in range(1000):
-        image, mask = data[i]
-        image       = image*cfg.std + cfg.mean
-        plt.subplot(121)
-        plt.imshow(np.uint8(image))
-        plt.subplot(122)
-        plt.imshow(mask)
-        input()
+if __name__ == '__main__':
+    # model = ResNet()
+    # model.eval()
+    # Input = torch.randn((1, 3, 352, 352))
+    # for i in range(100):
+    #     out = model(Input)
+    #     print(out)
+    # from thop import profile, clever_format
+    # flops, params = profile(model, inputs=(Input,))
+    # flops, params = clever_format([flops, params], '%.3f')
+    # print("flops {}, params {}".format(flops, params))
+    cfg = Config(datapath='../data/', mode='test', eval_freq=1)
+    dataset = Data('../../class_data/', cfg)
+    # print(dataset.classes)
+    print(dataset.class_to_idx)
+    # print(dataset.imgs)
+    img, label = dataset[0]
