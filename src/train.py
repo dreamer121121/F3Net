@@ -113,6 +113,37 @@ def generate_trimap(mask):
     return unknown/255
 
 
+def gaussian(ori_image, down_times=5):
+    # 1：添加第一个图像为原始图像
+    temp_gau = ori_image.copy()
+    gaussian_pyramid = [temp_gau]
+    for i in range(down_times):
+        # 2：连续存储5次下采样，这样高斯金字塔就有6层
+        temp_gau = cv2.pyrDown(temp_gau)
+        gaussian_pyramid.append(temp_gau)
+    return gaussian_pyramid
+
+
+def laplacian(gaussian_pyramid, up_times=5):
+    laplacian_pyramid = [gaussian_pyramid[-1]]
+
+    for i in range(up_times, 0, -1):
+        # i的取值为5,4,3,2,1,0也就是拉普拉斯金字塔有6层
+        temp_pyrUp = cv2.pyrUp(gaussian_pyramid[i])
+        temp_lap = cv2.subtract(gaussian_pyramid[i-1], temp_pyrUp)
+        laplacian_pyramid.append(temp_lap)
+    return laplacian_pyramid
+
+
+def Lapyramid_loss(pred, target):
+    lap_pyramid_pred = laplacian(gaussian(pred))
+    lap_pyramid_target = laplacian(gaussian(target))
+    tmp = np.zeros(pred.shape)
+    for i in range(1, 6):
+        tmp += abs(lap_pyramid_pred[i] - lap_pyramid_target[i])
+    return tmp
+
+
 def structure_loss(pred, mask):
     # wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
     # wbce  = (weit*wbce).sum(dim=(2,3))/weit.sum(dim=(2,3))
@@ -120,19 +151,26 @@ def structure_loss(pred, mask):
 
     # add cortor loss
     N, C, W, H = mask.shape
+    loss_lap_tmp = np.zeros([N, W, H, C])
 
     mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
     for i in range(N):
         f_mask = mask[i, :, :, :]
+        f_pred = pred[i, :, :, :]
         f_mask_img = tensor2im(f_mask)
+        f_mask_pred = tensor2im(f_pred)
         transition = generate_trimap(f_mask_img*255)
         mc_matrix[i, :, :, :] = transition[:, :, :]
+        loss_lap_tmp[i, :, :, :] = Lapyramid_loss(f_mask_pred, f_mask_img)
 
     W = im2tensor(mc_matrix).cuda()
+    loss_lap_tmp = im2tensor(loss_lap_tmp).cuda()
 
+    loss_lap = loss_lap_tmp * W
     loss_alpha = torch.sqrt(torch.square((mask-torch.sigmoid(pred))*W)+torch.square(torch.Tensor([1e-6]).cuda())).sum(dim=(2, 3)) / W.sum(dim=(2, 3))
 
     print('--loss_alpha--', loss_alpha.mean())
+    print('--loss_lap---', loss_lap.mean())
 
     weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
     wbce = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
@@ -143,7 +181,7 @@ def structure_loss(pred, mask):
     union = ((pred + mask) * weit).sum(dim=(2, 3))
     wiou = 1 - (inter + 1) / (union - inter + 1)
 
-    return (wiou + wbce + loss_alpha).mean()
+    return (wiou + wbce + loss_alpha + loss_lap).mean()
 
 
 def main(Dataset, Network):
