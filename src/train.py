@@ -74,6 +74,8 @@ def structure_loss(pred, target):
         loss = F.l1_loss(y_hat, y, reduction='none')
         loss = (loss * mask.float()).sum()
         non_zero_elements = mask.sum()
+        if non_zero_elements == 0:
+            non_zero_elements = 1
         return loss / non_zero_elements
 
     shape = target.shape
