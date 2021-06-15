@@ -118,7 +118,7 @@ def main(Dataset,Network):
 
         if (epoch + 1) % eval_cfg.eval_freq == 0 or epoch == train_cfg.epochs - 1:
 
-            mae = evaluate(net,eval_dataloader)
+            mae = evaluate(net, eval_dataloader)
 
             global best_mae
             is_best = mae < best_mae
