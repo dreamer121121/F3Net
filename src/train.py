@@ -21,7 +21,7 @@ import shutil
 import argparse
 
 from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm
-from .smoothing import gaussian_blur
+from smoothing import gaussian_blur
 
 log_stream = open('train_cortor.log', 'a')
 
@@ -67,9 +67,7 @@ def save_checkpoints(state, is_best, epoch, cfg):
                         '%s/%s_best.pth.tar' % (os.path.join(cfg.savepath), 'model'))
 
 
-
 def structure_loss(pred, target):
-
     def masked_l1_loss(y_hat, y, mask):
         loss = F.l1_loss(y_hat, y, reduction='none')
         loss = (loss * mask.float()).sum()
@@ -79,9 +77,9 @@ def structure_loss(pred, target):
         return loss / non_zero_elements
 
     shape = target.shape
-    mask = target[:, 0] # target:N, W, H
+    mask = target[:, 0]  # target:N, W, H
     smoothed_mask = gaussian_blur(
-        mask.unsqueeze(dim=1), (9, 9), (2.5, 2.5)).squeeze(dim=1)
+        mask.unsqueeze(dim=1), (9, 9), (2.5, 2.5)).squeeze(dim=1).unsqueeze(dim=1)
     unknown_mask = target[:, 1]
 
     l1_mask = torch.ones(mask.shape).cuda()
@@ -100,7 +98,6 @@ def structure_loss(pred, target):
     loss += F.mse_loss(F.sigmoid(pred), smoothed_mask)
 
     return loss
-
 
 
 def main(Dataset, Network):
