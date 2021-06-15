@@ -153,7 +153,7 @@ def train(net, optimizer, loader, sw, epoch, cfg):
     net.train()
     for step, (image, label) in enumerate(loader):
         image, label = image.cuda().float(), label.cuda()
-        print(image, label)
+        # print(image, label)
 
         out = net(image)
         loss = criterion(out, label)

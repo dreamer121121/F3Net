@@ -62,8 +62,6 @@ class ResNet(nn.Module):
         out4 = self.layer3(out3)
         out5 = self.layer4(out4)
         out = self.avgpool(out5).view(-1, 2048)
-        print(out.size())
-
         out = self.fc(out)
 
         return out
