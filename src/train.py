@@ -98,7 +98,7 @@ def main(Dataset, Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../../class_data/', savepath='./out', snapshot=args.resume, mode='train',
+    train_cfg = Dataset.Config(datapath='../../class_data/', savepath='./out_bkbone', snapshot=args.resume, mode='train',
                                batch=args.batch_size,
                                lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
