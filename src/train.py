@@ -110,7 +110,7 @@ def generate_trimap(mask):
     # import sys
     # sys.exit(0)
 
-    return unknown/255
+    return unknown / 255
 
 
 def gaussian(ori_image, down_times=5):
@@ -130,7 +130,7 @@ def laplacian(gaussian_pyramid, up_times=5):
     for i in range(up_times, 0, -1):
         # i的取值为5,4,3,2,1,0也就是拉普拉斯金字塔有6层
         temp_pyrUp = cv2.pyrUp(gaussian_pyramid[i])
-        temp_lap = cv2.subtract(gaussian_pyramid[i-1], temp_pyrUp)
+        temp_lap = cv2.subtract(gaussian_pyramid[i - 1], temp_pyrUp)
         laplacian_pyramid.append(temp_lap)
     return laplacian_pyramid
 
@@ -138,10 +138,16 @@ def laplacian(gaussian_pyramid, up_times=5):
 def Lapyramid_loss(pred, target):
     lap_pyramid_pred = laplacian(gaussian(pred))
     lap_pyramid_target = laplacian(gaussian(target))
-    tmp = np.zeros(pred.shape)
+
+    W, H, C = pred.shape
+    new_lap_pyramid_pred = [cv2.resize(item, (W, H)) for item in lap_pyramid_pred]
+    new_lap_pyramid_target = [cv2.resize(item, (W, H)) for item in lap_pyramid_target]
+    for item in new_lap_pyramid_target:
+        print(item.shape)
+    tmp = np.zeros((W, H))
     for i in range(1, 6):
-        tmp += abs(lap_pyramid_pred[i] - lap_pyramid_target[i])
-    return tmp
+        tmp += abs(new_lap_pyramid_pred[i] - new_lap_pyramid_target[i])
+    return tmp[:, :, np.newaxis]
 
 
 def structure_loss(pred, mask):
@@ -159,15 +165,17 @@ def structure_loss(pred, mask):
         f_pred = pred[i, :, :, :]
         f_mask_img = tensor2im(f_mask)
         f_mask_pred = tensor2im(f_pred)
-        transition = generate_trimap(f_mask_img*255)
+        transition = generate_trimap(f_mask_img * 255)
         mc_matrix[i, :, :, :] = transition[:, :, :]
         loss_lap_tmp[i, :, :, :] = Lapyramid_loss(f_mask_pred, f_mask_img)
 
     W = im2tensor(mc_matrix).cuda()
     loss_lap_tmp = im2tensor(loss_lap_tmp).cuda()
 
-    loss_lap = loss_lap_tmp * W
-    loss_alpha = torch.sqrt(torch.square((mask-torch.sigmoid(pred))*W)+torch.square(torch.Tensor([1e-6]).cuda())).sum(dim=(2, 3)) / W.sum(dim=(2, 3))
+    loss_lap = (loss_lap_tmp * W).sum(dim=(2, 3)) / W.sum(dim=(2, 3))
+    loss_alpha = torch.sqrt(
+        torch.square((mask - torch.sigmoid(pred)) * W) + torch.square(torch.Tensor([1e-6]).cuda())).sum(
+        dim=(2, 3)) / W.sum(dim=(2, 3))
 
     print('--loss_alpha--', loss_alpha.mean())
     print('--loss_lap---', loss_lap.mean())
