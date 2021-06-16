@@ -25,7 +25,7 @@ from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm
 log_stream = open('train_bkbone.log', 'a')
 
 global_step = 0
-accuracy = float('inf')
+accuracy = 0
 
 
 def parse_args():
@@ -98,7 +98,8 @@ def main(Dataset, Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../../class_data/', savepath='./out_bkbone', snapshot=args.resume, mode='train',
+    train_cfg = Dataset.Config(datapath='../../class_data/', savepath='./out_bkbone', snapshot=args.resume,
+                               mode='train',
                                batch=args.batch_size,
                                lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
@@ -120,7 +121,7 @@ def main(Dataset, Network):
                                 weight_decay=train_cfg.decay, nesterov=True)
     sw = SummaryWriter(train_cfg.savepath)
 
-    #net = nn.DataParallel(net, device_ids=[0])
+    # net = nn.DataParallel(net, device_ids=[0])
     net = net.cuda()
 
     if args.eval:
@@ -133,11 +134,11 @@ def main(Dataset, Network):
         train(net, optimizer, train_dataloader, sw, epoch, train_cfg)
 
         if (epoch + 1) % eval_cfg.eval_freq == 0 or epoch == train_cfg.epochs - 1:
-            loss = evaluate(net, eval_dataloader)
+            acc = evaluate(net, eval_dataloader)
 
             global accuracy
-            is_best =  loss < accuracy
-            best_loss = min(loss, accuracy)
+            is_best = acc > accuracy
+            best_loss = max(acc, accuracy)
 
             save_checkpoints({
                 'epoch': epoch + 1,
@@ -145,7 +146,7 @@ def main(Dataset, Network):
                 'best_loss': best_loss,
             }, is_best, epoch, train_cfg)
 
-            log_stream.write('Valid Loss {:.4f}\n'.format(loss))
+            log_stream.write('acc {:.4f}\n'.format(acc))
             log_stream.flush()
 
 
@@ -169,13 +170,49 @@ def train(net, optimizer, loader, sw, epoch, cfg):
         sw.add_scalar('loss', loss.item(), global_step=global_step)
         if step % 10 == 0:
             log_stream.write('%s | step:%d/%d/%d | lr=%.6f | loss=%.6f \n' % (
-            datetime.datetime.now(), global_step, epoch + 1, cfg.epochs, optimizer.param_groups[0]['lr'], loss.item()))
+                datetime.datetime.now(), global_step, epoch + 1, cfg.epochs, optimizer.param_groups[0]['lr'],
+                loss.item()))
             log_stream.flush()
 
 
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+
+def accuracy(output, target, topk=(1,)):
+    """Computes the precision@k for the specified values of k"""
+    with torch.no_grad():
+        maxk = max(topk)
+        batch_size = target.size(0)
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t()
+        correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+        res = []
+        for k in topk:
+            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+            res.append(correct_k.mul_(100.0 / batch_size))
+        return res
+
+
 def evaluate(net, loader):
+    top1 = AverageMeter()
     net.eval()
-    Loss = 0.0
     with torch.no_grad():
         for step, (image, label) in enumerate(loader):
             print('--image.shape--', image.size())
@@ -183,10 +220,10 @@ def evaluate(net, loader):
             image, label = image.cuda().float(), label.cuda()
 
             out = net(image)
-            loss = criterion(out, label)
-            Loss += loss
+            prec1, prec5 = accuracy(out, label, topk=(1, 5))
+            top1.update(prec1[0], image.size(0))
 
-    return Loss/len(loader)
+    return top1.avg
 
 
 if __name__ == '__main__':
