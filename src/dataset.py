@@ -126,7 +126,11 @@ class Data(Dataset):
         image = cv2.imread(self.cfg.datapath+'/image/'+name+'.jpg')[:,:,::-1].astype(np.float32)
         mask  = cv2.imread(self.cfg.datapath+'/mask/' +name+'.png', 0).astype(np.float32)
 
-
+        encode = [True, False][np.random.randint(0, 2)]
+        if encode:
+            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), np.arange(35, 90, 5)]
+            result, encimg = cv2.imencode('.jpg', image, encode_param)
+            image = cv2.imdecode(encimg, 1)
 
         # if len(image.shape) != 3
         # # print("img shape: ",image.shape)
@@ -148,7 +152,7 @@ class Data(Dataset):
             return image, mask, shape, name
 
     def collate(self, batch):
-        size = [224, 256, 288, 320, 352, 384, 416][np.random.randint(0, 7)]
+        size = [224, 256, 288, 320, 352, 384, 416, 448, 480, 512][np.random.randint(0, 10)]
         image, mask = [list(item) for item in zip(*batch)]
         for i in range(len(batch)):
             try:
