@@ -127,13 +127,16 @@ def structure_loss(pred, mask):
         f_mask_img = tensor2im(f_mask)
         transition = generate_trimap(f_mask_img*255)
         if transition.sum() == 0:
-            transition = np.ones(W, H, C)
+            transition = np.ones((W, H, C))
         mc_matrix[i, :, :, :] = transition[:, :, :]
 
     W = im2tensor(mc_matrix).cuda()
-    loss_alpha = torch.sqrt(
+    loss_alpha = 10 * (torch.sqrt(
         torch.square((mask - torch.sigmoid(pred)) * W) + torch.square(torch.Tensor([1e-6]).cuda())).sum(
-        dim=(2, 3)) / W.sum(dim=(2, 3))
+        dim=(2, 3)) / W.sum(dim=(2, 3)))
+
+
+    print('---139---', loss_alpha.size())
 
     print('--loss_alpha--', loss_alpha.mean())
 

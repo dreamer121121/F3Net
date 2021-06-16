@@ -6,6 +6,7 @@ import cv2
 import torch
 import numpy as np
 from torch.utils.data import Dataset
+import random
 
 ########################### Data Augmentation ###########################
 class Normalize(object):
@@ -128,7 +129,7 @@ class Data(Dataset):
 
         encode = [True, False][np.random.randint(0, 2)]
         if encode:
-            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), np.arange(35, 90, 5)]
+            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), random.randrange(35, 90, 5)]
             result, encimg = cv2.imencode('.jpg', image, encode_param)
             image = cv2.imdecode(encimg, 1)
 
