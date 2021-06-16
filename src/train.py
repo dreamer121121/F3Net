@@ -109,8 +109,8 @@ def main(Dataset, Network):
     eval_data = Dataset.Data(eval_cfg)
 
     train_dataloader = DataLoader(train_data, collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True,
-                                  num_workers=16)
-    eval_dataloader = DataLoader(eval_data, batch_size=1, shuffle=False, num_workers=16)
+                                  num_workers=0)
+    eval_dataloader = DataLoader(eval_data, batch_size=1, shuffle=False, num_workers=0)
 
     net = Network(num_classes=5)
     net.train(True)
@@ -120,8 +120,8 @@ def main(Dataset, Network):
                                 weight_decay=train_cfg.decay, nesterov=True)
     sw = SummaryWriter(train_cfg.savepath)
 
-    net = nn.DataParallel(net, device_ids=[0, 1, 2, 3])
-    net.cuda()
+    #net = nn.DataParallel(net, device_ids=[0])
+    net = net.cuda()
 
     if args.eval:
         evaluate(net, eval_dataloader)
@@ -153,7 +153,7 @@ def train(net, optimizer, loader, sw, epoch, cfg):
     net.train()
     for step, (image, label) in enumerate(loader):
         image, label = image.cuda().float(), label.cuda()
-        # print(image, label)
+        print(label.size())
 
         out = net(image)
         loss = criterion(out, label)
@@ -178,7 +178,9 @@ def evaluate(net, loader):
     Loss = 0.0
     with torch.no_grad():
         for step, (image, label) in enumerate(loader):
-            image = image.cuda().float()
+            print('--image.shape--', image.size())
+            print('--label.shape--', label.size())
+            image, label = image.cuda().float(), label.cuda()
 
             out = net(image)
             loss = criterion(out, label)

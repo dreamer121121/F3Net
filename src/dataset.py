@@ -118,13 +118,21 @@ class Data(dest.ImageFolder):
 
     def __getitem__(self, idx):
         img_path, label  = self.imgs[idx]
-        #print('-----img  name ----',self.cfg.datapath+'/image/'+name+'.jpg')
+        #print('---label----', type(label))
+        #print('-----img  name ----',img_path)
         image = cv2.imread(img_path)[:, :, ::-1].astype(np.float32)
 
         image = self.normalize(image)
         image = self.randomcrop(image)
         image = self.rotate(image)
         image = self.randomflip(image)
+        if self.cfg.mode == 'test':
+            #image = image[np.newaxis,:,:,:]
+            image = np.ascontiguousarray(image)
+            image = torch.from_numpy(image)
+            label = torch.Tensor([label]).squeeze(-1).long()
+        #print('---image---', image.size())
+            return image.permute(2,0,1), label
         return image, label
 
     def collate(self, batch):
@@ -156,8 +164,8 @@ if __name__ == '__main__':
     # flops, params = profile(model, inputs=(Input,))
     # flops, params = clever_format([flops, params], '%.3f')
     # print("flops {}, params {}".format(flops, params))
-    cfg = Config(datapath='../data/', mode='test', eval_freq=1)
-    dataset = Data('../../class_data/', cfg)
+    cfg = Config(datapath='../../class_data/', mode='test', eval_freq=1)
+    dataset = Data(cfg)
     # print(dataset.classes)
     print(dataset.class_to_idx)
     # print(dataset.imgs)
