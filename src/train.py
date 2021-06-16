@@ -25,7 +25,7 @@ from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm
 log_stream = open('train_bkbone.log', 'a')
 
 global_step = 0
-accuracy = 0
+best_accuracy = 0
 
 
 def parse_args():
@@ -136,14 +136,14 @@ def main(Dataset, Network):
         if (epoch + 1) % eval_cfg.eval_freq == 0 or epoch == train_cfg.epochs - 1:
             acc = evaluate(net, eval_dataloader)
 
-            global accuracy
-            is_best = acc > accuracy
-            best_loss = max(acc, accuracy)
+            global best_accuracy
+            is_best = acc > best_accuracy
+            best_accuracy = max(acc, best_accuracy)
 
             save_checkpoints({
                 'epoch': epoch + 1,
                 'state_dict': net.state_dict(),
-                'best_loss': best_loss,
+                'best_acc': best_accuracy,
             }, is_best, epoch, train_cfg)
 
             log_stream.write('acc {:.4f}\n'.format(acc))
