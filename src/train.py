@@ -162,7 +162,7 @@ def structure_loss(pred, mask):
     mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
     for i in range(N):
         f_mask = mask[i, :, :, :]
-        f_pred = pred[i, :, :, :]
+        f_pred = torch.sigmoid(pred[i, :, :, :])
         f_mask_img = tensor2im(f_mask)
         f_mask_pred = tensor2im(f_pred)
         transition = generate_trimap(f_mask_img * 255)
