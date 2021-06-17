@@ -63,7 +63,6 @@ class Test(object):
             total = datetime.datetime(1999,1,1)
 
             total = datetime.datetime(1999, 1, 1)
-            print('--type(self.loader--)', type(self.loader))
 
 
             for image, mask, shape, name in self.loader:
@@ -75,8 +74,7 @@ class Test(object):
 
                 image = image.cuda().float()
 
-                print(image)
-                image = image.to('cuda:1').float()
+                image = image.to('cuda:0').float()
 
                 start = datetime.datetime.now()
                 out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
