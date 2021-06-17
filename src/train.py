@@ -19,11 +19,11 @@ import dataset
 from net import F3Net
 import shutil
 import argparse
+import cv2
 
 from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm
-from smoothing import gaussian_blur
 
-log_stream = open('train_cortor.log', 'a')
+log_stream = open('train_PPM.log', 'a')
 
 global_step = 0
 best_mae = float('inf')
@@ -67,45 +67,138 @@ def save_checkpoints(state, is_best, epoch, cfg):
                         '%s/%s_best.pth.tar' % (os.path.join(cfg.savepath), 'model'))
 
 
-def structure_loss(pred, target):
-    def masked_l1_loss(y_hat, y, mask):
-        loss = F.l1_loss(y_hat, y, reduction='none')
-        loss = (loss * mask.float()).sum()
-        non_zero_elements = mask.sum()
-        if non_zero_elements == 0:
-            non_zero_elements = 1
-        return loss / non_zero_elements
+def tensor2im(image_tensor, imtype=np.uint8, normalize=True):
+    image_numpy = image_tensor.cpu().float().detach().numpy()
+    # print(image_numpy.shape)
+    # blank_image = np.zeros((image_tensor.shape[1],image_tensor.shape[2],image_tensor.shape[0]), np.uint8)
 
-    shape = target.shape
-    mask = target[:, 0]  # target:N, W, H
-    smoothed_mask = gaussian_blur(
-        mask.unsqueeze(dim=1), (9, 9), (2.5, 2.5)).squeeze(dim=1).unsqueeze(dim=1)
-    unknown_mask = target[:, 1]
+    blank_image = image_numpy.reshape(image_tensor.shape[1], image_tensor.shape[2], image_tensor.shape[0])
 
-    l1_mask = torch.ones(mask.shape).cuda()
-    l1_details_mask = torch.zeros(mask.shape).cuda()
+    return blank_image
 
-    for idx in range(shape[0]):
-        l1_details_mask[idx] = unknown_mask[idx]
 
-    loss = 0
-    loss += 2 * masked_l1_loss(F.sigmoid(pred), mask.unsqueeze(dim=1), l1_mask)
-    # this loss should give some learning signals to focus on unknown areas
-    loss += 3 * masked_l1_loss(F.sigmoid(pred), mask.unsqueeze(dim=1), l1_details_mask)
-    # i'm not quite sure if this loss gives the right incentive, the idea
-    # is to blur the segmentation mask a bit to reduce background bleeding
-    # caused by bad labels, preliminary results seem to be quite ok.
-    loss += F.mse_loss(F.sigmoid(pred), smoothed_mask)
-    print('---loss---', loss)
+def im2tensor(image_numpy):
+    image_tensor = torch.Tensor(image_numpy)
+    (N, W, H, C) = image_tensor.size()
+    res = image_tensor.view((N, C, W, H))
 
-    return loss
+    return res
+
+
+def generate_trimap(mask):
+    dilation_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
+    dilated = cv2.dilate(mask, dilation_kernel, iterations=5)
+
+    erosion_kernel = np.ones((3, 3), np.uint8)
+    eroded = cv2.erode(mask, erosion_kernel, iterations=3)
+
+    background = np.zeros(mask.shape, dtype=np.uint8)
+    background[dilated < 128] = 255
+
+    unknown = np.zeros(mask.shape, dtype=np.uint8)
+    unknown.fill(255)
+    unknown[eroded > 128] = 0
+    unknown[dilated < 128] = 0
+
+    foreground = np.zeros(mask.shape, dtype=np.uint8)
+    foreground[eroded > 128] = 255
+
+    # cv2.imshow('111', foreground)
+    # cv2.imshow('222', unknown)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    # import sys
+    # sys.exit(0)
+
+    return unknown / 255
+
+
+def gaussian(ori_image, down_times=5):
+    # 1：添加第一个图像为原始图像
+    temp_gau = ori_image.copy()
+    gaussian_pyramid = [temp_gau]
+    for i in range(down_times):
+        # 2：连续存储5次下采样，这样高斯金字塔就有6层
+        temp_gau = cv2.pyrDown(temp_gau)
+        gaussian_pyramid.append(temp_gau)
+    return gaussian_pyramid
+
+
+def laplacian(gaussian_pyramid, up_times=5):
+    laplacian_pyramid = [gaussian_pyramid[-1]]
+
+    for i in range(up_times, 0, -1):
+        # i的取值为5,4,3,2,1,0也就是拉普拉斯金字塔有6层
+        temp_pyrUp = cv2.pyrUp(gaussian_pyramid[i])
+        temp_lap = cv2.subtract(gaussian_pyramid[i - 1], temp_pyrUp)
+        laplacian_pyramid.append(temp_lap)
+    return laplacian_pyramid
+
+
+def Lapyramid_loss(pred, target):
+    lap_pyramid_pred = laplacian(gaussian(pred))
+    lap_pyramid_target = laplacian(gaussian(target))
+
+    W, H, C = pred.shape
+    new_lap_pyramid_pred = [cv2.resize(item, (W, H)) for item in lap_pyramid_pred]
+    new_lap_pyramid_target = [cv2.resize(item, (W, H)) for item in lap_pyramid_target]
+    for item in new_lap_pyramid_target:
+        print(item.shape)
+    tmp = np.zeros((W, H))
+    for i in range(1, 6):
+        tmp += abs(new_lap_pyramid_pred[i] - new_lap_pyramid_target[i])
+    return tmp[:, :, np.newaxis]
+
+
+def structure_loss(pred, mask):
+    # wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
+    # wbce  = (weit*wbce).sum(dim=(2,3))/weit.sum(dim=(2,3))
+    #
+
+    # add cortor loss
+    N, C, W, H = mask.shape
+    loss_lap_tmp = np.zeros([N, W, H, C])
+
+    mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
+    for i in range(N):
+        f_mask = mask[i, :, :, :]
+        f_pred = torch.sigmoid(pred[i, :, :, :])
+        f_mask_img = tensor2im(f_mask)
+        f_mask_pred = tensor2im(f_pred)
+        transition = generate_trimap(f_mask_img * 255)
+        if transition.sum() == 0:
+            transition = np.ones(W, H, C)
+        mc_matrix[i, :, :, :] = transition[:, :, :]
+        loss_lap_tmp[i, :, :, :] = Lapyramid_loss(f_mask_pred, f_mask_img)
+
+    W = im2tensor(mc_matrix).cuda()
+    loss_lap_tmp = im2tensor(loss_lap_tmp).cuda()
+
+    loss_lap = (loss_lap_tmp * W).sum(dim=(2, 3)) / W.sum(dim=(2, 3))
+    loss_alpha = torch.sqrt(
+        torch.square((mask - torch.sigmoid(pred)) * W) + torch.square(torch.Tensor([1e-6]).cuda())).sum(
+        dim=(2, 3)) / W.sum(dim=(2, 3))
+
+    print('--loss_alpha--', loss_alpha.mean())
+    print('--loss_lap---', loss_lap.mean())
+
+    weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
+    wbce = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
+    wbce = (weit * wbce).sum(dim=(2, 3)) / weit.sum(dim=(2, 3))
+
+    pred = torch.sigmoid(pred)
+    inter = ((pred * mask) * weit).sum(dim=(2, 3))
+    union = ((pred + mask) * weit).sum(dim=(2, 3))
+    wiou = 1 - (inter + 1) / (union - inter + 1)
+
+    return (wiou + wbce + loss_alpha + loss_lap).mean()
 
 
 def main(Dataset, Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../data/' + args.dataset, savepath='./out_cortor', snapshot=args.resume,
+    train_cfg = Dataset.Config(datapath='../data/' + args.dataset, savepath='./out_PPM', snapshot=args.resume,
                                mode='train',
                                batch=args.batch_size,
                                lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
@@ -167,14 +260,23 @@ def main(Dataset, Network):
 
 
 def evaluate(net, loader):
-    print('---eval----')
     mae = cal_mae()
     net.eval()
 
     with torch.no_grad():
         for image, mask, shape, name in loader:
             image = image.cuda().float()
+            # mask_1 = torch.unsqueeze(mask, dim=0).cuda().float()
             out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
+            # loss1u = structure_loss(out1u, mask_1)
+            # loss2u = structure_loss(out2u, mask_1)
+            #
+            # loss2r = structure_loss(out2r, mask_1)
+            # loss3r = structure_loss(out3r, mask_1)
+            # loss4r = structure_loss(out4r, mask_1)
+            # loss5r = structure_loss(out5r, mask_1)
+            # loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
+
             out = out2u
             pred = (torch.sigmoid(out[0, 0])).cpu().numpy()
 
@@ -197,20 +299,20 @@ def evaluate(net, loader):
 
 def train(net, optimizer, loader, sw, epoch, cfg):
     net.train()
-    for step, (image, target) in enumerate(loader):
-        image, target = image.cuda().float(), target.cuda().float()
+    for step, (image, mask) in enumerate(loader):
+        image, mask = image.cuda().float(), mask.cuda().float()
         # print(image.shape) #(32,3,320,320)
         # print(mask.shape) #(32,1,320,320)
         # import sys
         # sys.exit(0)
         out1u, out2u, out2r, out3r, out4r, out5r = net(image)
-        loss1u = structure_loss(out1u, target)
-        loss2u = structure_loss(out2u, target)
+        loss1u = structure_loss(out1u, mask)
+        loss2u = structure_loss(out2u, mask)
 
-        loss2r = structure_loss(out2r, target)
-        loss3r = structure_loss(out3r, target)
-        loss4r = structure_loss(out4r, target)
-        loss5r = structure_loss(out5r, target)
+        loss2r = structure_loss(out2r, mask)
+        loss3r = structure_loss(out3r, mask)
+        loss4r = structure_loss(out4r, mask)
+        loss5r = structure_loss(out5r, mask)
         loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
 
         optimizer.zero_grad()

@@ -25,7 +25,7 @@ def weight_init(module):
             nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
             if m.bias is not None:
                 nn.init.zeros_(m.bias)
-        elif isinstance(m, nn.Sequential):
+        elif isinstance(m, nn.Sequential) or isinstance(m, nn.ModuleList) or isinstance(m, nn.AdaptiveAvgPool2d):
             weight_init(m)
         elif isinstance(m, nn.ReLU):
             pass
@@ -131,7 +131,7 @@ class Decoder(nn.Module):
         self.cfm34  = CFM()
         self.cfm23  = CFM()
 
-    def forward(self, out2h, out3h, out4h, out5v, fback=None):
+    def forward(self, out2h, out3h, out4h, out5v, fback=None, g_info_list=None):
         if fback is not None:
             refine5      = F.interpolate(fback, size=out5v.size()[2:], mode='bilinear')
             refine4      = F.interpolate(fback, size=out4h.size()[2:], mode='bilinear')
@@ -142,9 +142,19 @@ class Decoder(nn.Module):
             out3h, out3v = self.cfm34(out3h+refine3, out4v)
             out2h, pred  = self.cfm23(out2h+refine2, out3v)
         else:
-            out4h, out4v = self.cfm45(out4h, out5v)
-            out3h, out3v = self.cfm34(out3h, out4v)
-            out2h, pred  = self.cfm23(out2h, out3v)
+            if g_info_list is not None:
+                print('--146--', out5v.size())
+                print(g_info_list[0].size())
+                out5v += g_info_list[0]
+                out4h, out4v = self.cfm45(out4h, out5v)
+                out4v += g_info_list[1]
+                out3h, out3v = self.cfm34(out3h, out4v)
+                out3v += g_info_list[2]
+                out2h, pred  = self.cfm23(out2h, out3v)
+            else:
+                out4h, out4v = self.cfm45(out4h, out5v)
+                out3h, out3v = self.cfm34(out3h, out4v)
+                out2h, pred  = self.cfm23(out2h, out3v)
         return out2h, out3h, out4h, out5v, pred
 
     def initialize(self):
@@ -158,13 +168,20 @@ class F3Net(nn.Module):
         self.bkbone   = ResNet()
 
         #================PPM=================
-        self.inplanes = 512
+        self.in_planes = 512
+        self.out_planes = [2048, 1024, 512]
         self.ppms_pre = nn.Conv2d(2048, self.in_planes, 1, 1, bias=False)
+
         ppms = []
+        infos = []
         for ii in [1, 3, 5]:
             ppms.append(nn.Sequential(nn.AdaptiveAvgPool2d(ii), nn.Conv2d(self.in_planes, self.in_planes, 1, 1, bias=False), nn.ReLU(inplace=True)))
         self.ppms = nn.ModuleList(ppms)
         self.ppm_cat = nn.Sequential(nn.Conv2d(self.in_planes * 4, self.in_planes, 3, 1, 1, bias=False), nn.ReLU(inplace=True))
+
+        for li in self.out_planes:
+            infos.append(nn.Sequential(nn.Conv2d(self.in_planes, 64, 3, 1, 1, bias=False), nn.ReLU(inplace=True)))
+        self.infos = nn.ModuleList(infos)
         #====================================
 
         self.squeeze5 = nn.Sequential(nn.Conv2d(2048, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
@@ -185,14 +202,24 @@ class F3Net(nn.Module):
 
     def forward(self, x, shape=None):
         out2h, out3h, out4h, out5v        = self.bkbone(x)
+        # print('--out2h--', out2h.size())
+        # print(out3h.size())
+        # print(out4h.size())
+        # print(out5v.size())
+
+        xs = [out3h, out4h, out5v]
         xs_1= self.ppms_pre(out5v)
         xls = [xs_1]
         for k in range(len(self.ppms)):
             xls.append(F.interpolate(self.ppms[k](xs_1), xs_1.size()[2:], mode='bilinear', align_corners=True))
         xls = self.ppm_cat(torch.cat(xls, dim=1))
 
+        infos = []
+        for k in range(len(self.infos)):
+            infos.append(self.infos[k](F.interpolate(xls, xs[len(self.infos)-1-k].size()[2:], mode='bilinear', align_corners=True)))
+
         out2h, out3h, out4h, out5v        = self.squeeze2(out2h), self.squeeze3(out3h), self.squeeze4(out4h), self.squeeze5(out5v)
-        out2h, out3h, out4h, out5v, pred1 = self.decoder1(out2h, out3h, out4h, out5v)
+        out2h, out3h, out4h, out5v, pred1 = self.decoder1(out2h, out3h, out4h, out5v, g_info_list=infos)
         out2h, out3h, out4h, out5v, pred2 = self.decoder2(out2h, out3h, out4h, out5v, pred1)
 
 
