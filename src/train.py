@@ -219,6 +219,7 @@ def structure_loss(pred, mask):
     # L = np.ones((N, W, H, C))
     W = np.where(mc_matrix>0, 1, 0)
     W = im2tensor(W).cuda()
+    loss_lap_tmp = im2tensor(loss_lap_tmp).cuda()
 
     loss_lap = (loss_lap_tmp * W).sum(dim=(2, 3)) / W.sum(dim=(2, 3))
     loss_alpha = torch.sqrt(
