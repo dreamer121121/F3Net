@@ -131,15 +131,11 @@ def structure_loss(pred, mask):
         mc_matrix[i, :, :, :] = transition[:, :, :]
 
     W = im2tensor(mc_matrix).cuda()
-    loss_alpha = 10 * (torch.sqrt(
+    loss_alpha = torch.sqrt(
         torch.square((mask - torch.sigmoid(pred)) * W) + torch.square(torch.Tensor([1e-6]).cuda())).sum(
-        dim=(2, 3)) / W.sum(dim=(2, 3)))
-
-
-    print('---139---', loss_alpha.size())
+        dim=(2, 3)) / W.sum(dim=(2, 3))
 
     print('--loss_alpha--', loss_alpha.mean())
-
     weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
     wbce = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
     wbce = (weit * wbce).sum(dim=(2, 3)) / weit.sum(dim=(2, 3))
