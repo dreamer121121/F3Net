@@ -57,8 +57,10 @@ class Resize(object):
             mask  = cv2.resize( mask, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
             return image, mask
         else:
-            image = cv2.resize(image, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
-            return image,mask
+            image = cv2.resize(image, dsize=(600, 600), interpolation=cv2.INTER_LINEAR)
+            return image, mask
+
+
 class ToTensor(object):
     def __call__(self, image, mask):
         image = torch.from_numpy(image)
