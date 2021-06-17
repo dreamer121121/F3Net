@@ -156,6 +156,17 @@ class F3Net(nn.Module):
         super(F3Net, self).__init__()
         self.cfg      = cfg
         self.bkbone   = ResNet()
+
+        #================PPM=================
+        self.inplanes = 512
+        self.ppms_pre = nn.Conv2d(2048, self.in_planes, 1, 1, bias=False)
+        ppms = []
+        for ii in [1, 3, 5]:
+            ppms.append(nn.Sequential(nn.AdaptiveAvgPool2d(ii), nn.Conv2d(self.in_planes, self.in_planes, 1, 1, bias=False), nn.ReLU(inplace=True)))
+        self.ppms = nn.ModuleList(ppms)
+        self.ppm_cat = nn.Sequential(nn.Conv2d(self.in_planes * 4, self.in_planes, 3, 1, 1, bias=False), nn.ReLU(inplace=True))
+        #====================================
+
         self.squeeze5 = nn.Sequential(nn.Conv2d(2048, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
         self.squeeze4 = nn.Sequential(nn.Conv2d(1024, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
         self.squeeze3 = nn.Sequential(nn.Conv2d( 512, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
@@ -174,9 +185,16 @@ class F3Net(nn.Module):
 
     def forward(self, x, shape=None):
         out2h, out3h, out4h, out5v        = self.bkbone(x)
+        xs_1= self.ppms_pre(out5v)
+        xls = [xs_1]
+        for k in range(len(self.ppms)):
+            xls.append(F.interpolate(self.ppms[k](xs_1), xs_1.size()[2:], mode='bilinear', align_corners=True))
+        xls = self.ppm_cat(torch.cat(xls, dim=1))
+
         out2h, out3h, out4h, out5v        = self.squeeze2(out2h), self.squeeze3(out3h), self.squeeze4(out4h), self.squeeze5(out5v)
         out2h, out3h, out4h, out5v, pred1 = self.decoder1(out2h, out3h, out4h, out5v)
         out2h, out3h, out4h, out5v, pred2 = self.decoder2(out2h, out3h, out4h, out5v, pred1)
+
 
         shape = x.size()[2:] if shape is None else shape
         pred1 = F.interpolate(self.linearp1(pred1), size=shape, mode='bilinear')
