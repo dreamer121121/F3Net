@@ -42,10 +42,10 @@ class ResNet(nn.Module):
         self.layer2   = self.make_layer(128, 4, stride=2, dilation=1)
         self.layer3   = self.make_layer(256, 23, stride=2, dilation=1)
         self.layer4   = self.make_layer(512, 3, stride=2, dilation=1)
-        self.initialize()
 
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Linear(512 * 4, num_classes)
+        self.initialize()
 
     def make_layer(self, planes, blocks, stride, dilation):
         downsample    = nn.Sequential(nn.Conv2d(self.inplanes, planes*4, kernel_size=1, stride=stride, bias=False), nn.BatchNorm2d(planes*4))
@@ -72,7 +72,7 @@ class ResNet(nn.Module):
             self.load_state_dict(torch.load('../res/resnet101-5d3b4d8f.pth'), strict=False)
         else:
             print('loading checkpoint ==> '+self.cfg.snapshot)
-            self.load_state_dict(torch.load(self.cfg.snapshot)['state_dict'], strict=True)
+            self.load_state_dict(torch.load(self.cfg.snapshot)['state_dict'])
 
 
 if __name__ == '__main__':
