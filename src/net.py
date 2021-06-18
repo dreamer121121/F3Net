@@ -32,8 +32,9 @@ class Bottleneck(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, cfg, num_classes):
         super(ResNet, self).__init__()
+        self.cfg = cfg
         self.inplanes = 64
         self.conv1    = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1      = nn.BatchNorm2d(64)
@@ -67,7 +68,11 @@ class ResNet(nn.Module):
         return out
 
     def initialize(self):
-        self.load_state_dict(torch.load('../res/resnet101-5d3b4d8f.pth'), strict=False)
+        if not self.cfg.snapshot:
+            self.load_state_dict(torch.load('../res/resnet101-5d3b4d8f.pth'), strict=False)
+        else:
+            print('loading checkpoint ==> '+self.cfg.snapshot)
+            self.load_state_dict(torch.load(self.cfg.snapshot)['state_dict'], strict=True)
 
 
 if __name__ == '__main__':

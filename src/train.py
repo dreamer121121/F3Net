@@ -98,7 +98,7 @@ def main(Dataset, Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../../class_data/', savepath='./out_bkbone', snapshot=args.resume,
+    train_cfg = Dataset.Config(datapath='../../class_data_eval/', savepath='./out_bkbone', snapshot=args.resume,
                                mode='train',
                                batch=args.batch_size,
                                lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
@@ -111,9 +111,9 @@ def main(Dataset, Network):
 
     train_dataloader = DataLoader(train_data, collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True,
                                   num_workers=0)
-    eval_dataloader = DataLoader(eval_data, batch_size=1, shuffle=False, num_workers=0)
+    eval_dataloader = DataLoader(eval_data, batch_size=32, shuffle=False, num_workers=0)
 
-    net = Network(num_classes=5)
+    net = Network(train_cfg, num_classes=5)
     net.train(True)
 
     ## parameter
@@ -222,7 +222,7 @@ def evaluate(net, loader):
             out = net(image)
             prec1, prec5 = accuracy(out, label, topk=(1, 5))
             top1.update(prec1[0], image.size(0))
-
+    print('----acc:---',top1.avg)
     return top1.avg
 
 
