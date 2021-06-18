@@ -53,7 +53,7 @@ class Resize(object):
         self.H = H
         self.W = W
 
-    def __call__(self, image, mask,mode='train'):
+    def __call__(self, image,mode='train'):
         if mode == 'train':
             image = cv2.resize(image, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
             return image
@@ -63,7 +63,7 @@ class Resize(object):
 
 
 class ToTensor(object):
-    def __call__(self, image, mask):
+    def __call__(self, image):
         image = torch.from_numpy(image)
         image = image.permute(2, 0, 1)
         return image
@@ -122,18 +122,18 @@ class Data(dest.ImageFolder):
         #print('-----img  name ----',img_path)
         image = cv2.imread(img_path)[:, :, ::-1].astype(np.float32)
 
-        image = self.normalize(image)
-        image = self.randomcrop(image)
-        image = self.rotate(image)
-        image = self.randomflip(image)
-        if self.cfg.mode == 'test':
-            #image = image[np.newaxis,:,:,:]
-            image = np.ascontiguousarray(image)
-            image = torch.from_numpy(image)
-            label = torch.Tensor([label]).squeeze(-1).long()
-        #print('---image---', image.size())
-            return image.permute(2,0,1), label
-        return image, label
+        if self.cfg.mode == 'train':
+            image = self.normalize(image)
+            image = self.randomcrop(image)
+            image = self.rotate(image)
+            image = self.randomflip(image)
+
+        else:
+            image = self.normalize(image)
+            image = self.resize(image)
+            image = self.totensor(image)
+
+        return image,label
 
     def collate(self, batch):
         size = [224, 256, 288, 320, 352, 384, 416][np.random.randint(0, 7)]
@@ -150,7 +150,6 @@ class Data(dest.ImageFolder):
 
     def __len__(self):
         return len(self.samples)
-
 
 ########################### Testing Script ###########################
 if __name__ == '__main__':
