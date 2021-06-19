@@ -35,27 +35,6 @@ class Test(object):
         self.net.to('cuda:1')
         self.path = path
 
-    def show(self):
-        with torch.no_grad():
-            for image, mask, shape, name in self.loader:
-                print('image.shape: ',image.shape)
-                import sys
-                sys.exit(0)
-                image, mask = image.to('cuda:1').float(), mask.to('cuda:1').float()
-                out1u, out2u, out2r, out3r, out4r, out5r = self.net(image)
-                out = out2u
-
-                plt.subplot(221)
-                plt.imshow(np.uint8(image[0].permute(1,2,0).cpu().numpy()*self.cfg.std + self.cfg.mean))
-                plt.subplot(222)
-                plt.imshow(mask[0].cpu().numpy())
-                plt.subplot(223)
-                plt.imshow(out[0, 0].cpu().numpy())
-                plt.subplot(224)
-                plt.imshow(torch.sigmoid(out[0, 0]).cpu().numpy())
-                plt.show()
-                input()
-    
     def save(self):
         with torch.no_grad():
             import datetime

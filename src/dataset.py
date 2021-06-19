@@ -127,11 +127,6 @@ class Data(Dataset):
         image = cv2.imread(self.cfg.datapath+'/image/'+name+'.jpg')[:,:,::-1].astype(np.float32)
         mask  = cv2.imread(self.cfg.datapath+'/mask/' +name+'.png', 0).astype(np.float32)
 
-        encode = [True, False][np.random.randint(0, 2)]
-        if encode:
-            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), random.randrange(35, 90, 5)]
-            result, encimg = cv2.imencode('.jpg', image, encode_param)
-            image = cv2.imdecode(encimg, 1)
 
         # if len(image.shape) != 3
         # # print("img shape: ",image.shape)
@@ -142,6 +137,12 @@ class Data(Dataset):
         shape = mask.shape
 
         if self.cfg.mode=='train':
+            encode = [True, False][np.random.randint(0, 2)]
+            if encode:
+                encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), random.randrange(35, 90, 5)]
+                result, encimg = cv2.imencode('.jpg', image, encode_param)
+                image = cv2.imdecode(encimg, 1)
+
             image, mask = self.normalize(image, mask)
             image, mask = self.randomcrop(image, mask)
             image, mask = self.randomflip(image, mask)
