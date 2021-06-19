@@ -145,10 +145,10 @@ class Test(object):
     def deploy(self):
 
         normalize = Normalize(mean=self.cfg.mean, std=self.cfg.std)
-        resize = Resize(352, 352)
+        resize = Resize(512, 512)
         totensor = ToTensor()
 
-        fr = open(self.path+'/test.txt','r')
+        fr = open(self.path+'/test.txt', 'r')
 
         file_list = fr.readlines()
 
