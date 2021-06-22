@@ -192,7 +192,7 @@ def structure_loss(pred, mask):
 
     # add cortor loss
     N, C, W, H = mask.shape
-    kernal = np.ones((5, 5), np.uint8)
+    # kernal = np.ones((5, 5), np.uint8)
     loss_lap_tmp = np.zeros([N, W, H, C])
     mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
     for i in range(N):
@@ -200,18 +200,18 @@ def structure_loss(pred, mask):
         f_pred = torch.sigmoid(pred[i, :, :, :])
         f_mask_img = tensor2im(f_mask)
         f_mask_pred = tensor2im(f_pred)
-        e_y = cv2.erode(f_mask_img, kernel=kernal, iterations=1)
-        # d_y = cv2.dilate(f_mask_img, kernel=kernal, iterations=1)
-        m_c = cv2.GaussianBlur(5 * (f_mask_img[:, :, 0] - e_y), (5, 5), 0)
-        m_c = m_c[:, :, np.newaxis]
-        if m_c.sum() == 0:
-            m_c = np.ones((W, H, C))
-        mc_matrix[i, :, :, :] = m_c[:, :, :]
+        # e_y = cv2.erode(f_mask_img, kernel=kernal, iterations=1)
+        # # d_y = cv2.dilate(f_mask_img, kernel=kernal, iterations=1)
+        # m_c = cv2.GaussianBlur(5 * (f_mask_img[:, :, 0] - e_y), (5, 5), 0)
+        # m_c = m_c[:, :, np.newaxis]
+        transition = generate_trimap(f_mask_img * 255)
+        if transition.sum() == 0:
+            transition = np.ones((W, H, C))
+        mc_matrix[i, :, :, :] =  transition[:, :, :]
         loss_lap_tmp[i, :, :, :] = Lapyramid_loss(f_mask_pred, f_mask_img)
 
     # L = np.ones((N, W, H, C))
-    W = np.where(mc_matrix > 0, 1, 0)
-    W = im2tensor(W).cuda()
+    W = im2tensor(mc_matrix).cuda()
     loss_lap_tmp = im2tensor(loss_lap_tmp).cuda()
 
     loss_lap = (loss_lap_tmp * W).sum(dim=(2, 3)) / W.sum(dim=(2, 3))

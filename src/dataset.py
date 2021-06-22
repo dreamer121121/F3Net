@@ -137,12 +137,11 @@ class Data(Dataset):
         shape = mask.shape
 
         if self.cfg.mode=='train':
-            encode = [True, False][np.random.randint(0, 2)]
-            if encode:
-                encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), random.randrange(35, 90, 5)]
-                result, encimg = cv2.imencode('.jpg', image, encode_param)
-                image = cv2.imdecode(encimg, 1)
-
+            # encode = [True, False][np.random.randint(0, 2)]
+            # if encode:
+            #     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), random.randrange(35, 90, 5)]
+            #     result, encimg = cv2.imencode('.jpg', image, encode_param)
+            #     image = cv2.imdecode(encimg, 1)
             image, mask = self.normalize(image, mask)
             image, mask = self.randomcrop(image, mask)
             image, mask = self.randomflip(image, mask)
@@ -154,7 +153,7 @@ class Data(Dataset):
             return image, mask, shape, name
 
     def collate(self, batch):
-        size = [224, 256, 288, 320, 352, 384, 416, 448, 480, 512][np.random.randint(0, 10)]
+        size = 512
         image, mask = [list(item) for item in zip(*batch)]
         for i in range(len(batch)):
             try:
