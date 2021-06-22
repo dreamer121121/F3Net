@@ -145,7 +145,7 @@ class Test(object):
     def deploy(self):
 
         normalize = Normalize(mean=self.cfg.mean, std=self.cfg.std)
-        resize = Resize(512, 512)
+        resize = Resize(640, 640)
         totensor = ToTensor()
 
         fr = open(self.path+'/test.txt', 'r')
@@ -188,7 +188,7 @@ class Test(object):
             if args.erd:
                 ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
 
-                mask = cv2.blur(img_thr, (3, 3))
+                mask = cv2.blur(img_thr, (5, 5))
 
                 # kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
                 #
