@@ -227,8 +227,6 @@ def structure_loss(pred, mask):
         loss_lap_tmp[i, :, :, :] = Lapyramid_loss(f_mask_pred, f_mask_img)
         miou_loss_list.append(miou_loss(f_mask_pred, f_mask_img))
 
-
-
     # L = np.ones((N, W, H, C))
     W = np.where(mc_matrix>0, 1, 0)
     W = im2tensor(W).cuda()
