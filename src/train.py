@@ -177,15 +177,13 @@ def Lapyramid_loss(pred, target):
     W, H, C = pred.shape
     new_lap_pyramid_pred = [cv2.resize(item, (W, H)) for item in lap_pyramid_pred]
     new_lap_pyramid_target = [cv2.resize(item, (W, H)) for item in lap_pyramid_target]
-    for item in new_lap_pyramid_target:
-        print(item.shape)
     tmp = np.zeros((W, H))
     for i in range(1, 6):
         tmp += abs(new_lap_pyramid_pred[i] - new_lap_pyramid_target[i])
     return tmp[:, :, np.newaxis]
 
 
-def structure_loss(pred, mask):
+def structure_loss(pred, mask, sw=None):
     # wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
     # wbce  = (weit*wbce).sum(dim=(2,3))/weit.sum(dim=(2,3))
     #
@@ -219,8 +217,11 @@ def structure_loss(pred, mask):
         torch.square((mask - torch.sigmoid(pred)) * W) + torch.square(torch.Tensor([1e-6]).cuda())).sum(
         dim=(2, 3)) / W.sum(dim=(2, 3))
 
-    print('--loss_alpha--', loss_alpha.mean())
-    print('--loss_lap---', loss_lap.mean())
+    if sw:
+        sw.add_scalar('alpha_loss', loss_alpha.mean().item(), global_step=global_step)
+        sw.add_scalar('loss_lap', loss_lap.mean().item(), global_step=global_step)
+        print('--loss_alpha--', loss_alpha.mean())
+        print('--loss_lap---', loss_lap.mean())
 
     weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
     wbce = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
@@ -350,10 +351,10 @@ def train(net, optimizer, loader, sw, epoch, cfg):
         loss1u = structure_loss(out1u, mask)
         loss2u = structure_loss(out2u, mask)
 
-        loss2r = structure_loss(out2r, mask)
-        loss3r = structure_loss(out3r, mask)
-        loss4r = structure_loss(out4r, mask)
-        loss5r = structure_loss(out5r, mask)
+        loss2r = structure_loss(out2r, mask, sw=sw)
+        loss3r = structure_loss(out3r, mask, )
+        loss4r = structure_loss(out4r, mask, )
+        loss5r = structure_loss(out5r, mask, )
         loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
 
         optimizer.zero_grad()
