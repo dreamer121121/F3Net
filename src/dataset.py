@@ -57,7 +57,7 @@ class Resize(object):
             mask  = cv2.resize( mask, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
             return image, mask
         else:
-            image = cv2.resize(image, dsize=(352, 600), interpolation=cv2.INTER_LINEAR)
+            image = cv2.resize(image, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
             return image, mask
 
 
