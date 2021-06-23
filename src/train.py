@@ -16,6 +16,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 import dataset
+
 from net import F3Net
 import shutil
 import argparse
@@ -25,8 +26,9 @@ from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm
 
 log_stream = open('train.log', 'a')
 
+
 global_step = 0
-best_mae = float('inf')
+accuracy = float('inf')
 
 
 def parse_args():
@@ -65,6 +67,7 @@ def save_checkpoints(state, is_best, epoch, cfg):
     if is_best:
         shutil.copyfile('%s/%s_%dcheckpoint.pth.tar' % (os.path.join(cfg.savepath), 'model', epoch),
                         '%s/%s_best.pth.tar' % (os.path.join(cfg.savepath), 'model'))
+
 
 
 def tensor2im(image_tensor, imtype=np.uint8, normalize=True):
@@ -114,11 +117,7 @@ def generate_trimap(mask):
 
 
 def structure_loss(pred, mask):
-    # wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
-    # wbce  = (weit*wbce).sum(dim=(2,3))/weit.sum(dim=(2,3))
-    #
 
-    # add cortor loss
     N, C, W, H = mask.shape
 
     mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
@@ -153,11 +152,13 @@ def main(Dataset, Network):
     ##parse args
     args = parse_args()
 
+
     train_cfg = Dataset.Config(datapath='../data/' + args.dataset, savepath='./out', snapshot=args.resume, mode='train',
                                batch=args.batch_size,
                                lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
     eval_cfg = Dataset.Config(datapath='../data/' + args.dataset, mode='test', eval_freq=1)
+
 
     train_data = Dataset.Data(train_cfg)
 
@@ -166,6 +167,7 @@ def main(Dataset, Network):
     train_dataloader = DataLoader(train_data, collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True,
                                   num_workers=16)
     eval_dataloader = DataLoader(eval_data, batch_size=1, shuffle=False, num_workers=16)
+
 
     net = Network(train_cfg)
     net.train(True)
@@ -191,26 +193,30 @@ def main(Dataset, Network):
 
     for epoch in range(train_cfg.start, train_cfg.epochs):
         log_stream.write('=' * 30 + 'Epoch: ' + str(epoch + 1) + '=' * 30 + '\n')
+
         optimizer.param_groups[0]['lr'] = (1 - abs((epoch + 1) / (train_cfg.epochs + 1) * 2 - 1)) * train_cfg.lr * 0.1
         optimizer.param_groups[1]['lr'] = (1 - abs((epoch + 1) / (train_cfg.epochs + 1) * 2 - 1)) * train_cfg.lr
 
         train(net, optimizer, train_dataloader, sw, epoch, train_cfg)
 
         if (epoch + 1) % eval_cfg.eval_freq == 0 or epoch == train_cfg.epochs - 1:
+
             mae, loss = evaluate(net, eval_dataloader)
 
             global best_mae
             is_best = mae < best_mae
             best_mae = min(mae, best_mae)
 
+
             save_checkpoints({
                 'epoch': epoch + 1,
                 'state_dict': net.state_dict(),
-                'best_mae': best_mae,
+                'best_loss': best_mae,
             }, is_best, epoch, train_cfg)
 
-            log_stream.write('Valid MAE: {:.4f} Loss {:.4f}\n'.format(mae, loss))
+            log_stream.write('Valid Loss {:.4f}\n'.format(loss))
             log_stream.flush()
+
 
 
 def evaluate(net, loader):
@@ -268,6 +274,8 @@ def train(net, optimizer, loader, sw, epoch, cfg):
         loss5r = structure_loss(out5r, mask)
         loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
 
+
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -276,6 +284,7 @@ def train(net, optimizer, loader, sw, epoch, cfg):
         global global_step
         global_step += 1
         sw.add_scalar('lr', optimizer.param_groups[0]['lr'], global_step=global_step)
+
         sw.add_scalars('loss', {'loss1u': loss1u.item(), 'loss2u': loss2u.item(), 'loss2r': loss2r.item(),
                                 'loss3r': loss3r.item(), 'loss4r': loss4r.item(), 'loss5r': loss5r.item()},
                        global_step=global_step)

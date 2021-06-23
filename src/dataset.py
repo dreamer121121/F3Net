@@ -6,6 +6,8 @@ import cv2
 import torch
 import numpy as np
 from torch.utils.data import Dataset
+import torchvision.datasets as dest
+
 
 ########################### Data Augmentation ###########################
 class Normalize(object):
@@ -13,14 +15,13 @@ class Normalize(object):
         self.mean = mean 
         self.std  = std
     
-    def __call__(self, image, mask):
+    def __call__(self, image):
         image = (image - self.mean)/self.std
-        mask /= 255
-        return image, mask
+        return image
 
 
 class RandomCrop(object):
-    def __call__(self, image, mask):
+    def __call__(self, image):
         H,W,_   = image.shape
         randw   = np.random.randint(W/8)
         randh   = np.random.randint(H/8)
@@ -31,7 +32,7 @@ class RandomCrop(object):
         #if self.cal_shape(tmp_mask):
         #    return image[p0:p1,p2:p3, :], mask
         #else:
-        return image[p0:p1,p2:p3, :], mask[p0:p1,p2:p3]
+        return image[p0:p1,p2:p3, :]
 
     #def cal_shape(array):
     #    h, w = array.shape
@@ -40,11 +41,11 @@ class RandomCrop(object):
 
 
 class RandomFlip(object):
-    def __call__(self, image, mask):
+    def __call__(self, image):
         if np.random.randint(2)==0:
-            return image[:,::-1,:], mask[:, ::-1]
+            return image[:,::-1,:]
         else:
-            return image, mask
+            return image
 
 
 class Resize(object):
@@ -55,26 +56,24 @@ class Resize(object):
     def __call__(self, image, mask,mode='train'):
         if mode == 'train':
             image = cv2.resize(image, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
-            mask  = cv2.resize( mask, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
-            return image, mask
+            return image
         else:
             image = cv2.resize(image, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
-            return image, mask
+            return image
 
 
 class ToTensor(object):
     def __call__(self, image, mask):
         image = torch.from_numpy(image)
         image = image.permute(2, 0, 1)
-        mask  = torch.from_numpy(mask)
-        return image, mask
+        return image
 
 
 class Rotate(object):
-    def __call__(self, image, mask):
+    def __call__(self, image):
         angle = [90, 180, 270][np.random.randint(0, 3)]
 
-        return self.rotate(image, angle), self.rotate(mask, angle)
+        return self.rotate(image, angle)
 
     def rotate(self, image, angle, center=None, scale=1.0):
         (h, w) = image.shape[:2]
@@ -103,21 +102,19 @@ class Config(object):
         else:
             return None
 
+
 #f = open('error_sample.txt','w')
 ########################### Dataset Class ###########################
-class Data(Dataset):
+class Data(dest.ImageFolder):
     def __init__(self, cfg):
-        self.cfg        = cfg
+        super(Data, self).__init__(cfg.datapath)
+        self.cfg = cfg
         self.normalize  = Normalize(mean=cfg.mean, std=cfg.std)
         self.randomcrop = RandomCrop()
         self.randomflip = RandomFlip()
         self.resize     = Resize(352, 352)
         self.totensor   = ToTensor()
         self.rotate     = Rotate()
-        with open(cfg.datapath+'/'+cfg.mode+'.txt', 'r') as lines:
-            self.samples = []
-            for line in lines:
-                self.samples.append(line.strip())
 
     def __getitem__(self, idx):
         name  = self.samples[idx]
@@ -141,32 +138,35 @@ class Data(Dataset):
     def collate(self, batch):
         size = [224, 256, 288, 320, 352, 384, 416][np.random.randint(0, 7)]
         image, mask = [list(item) for item in zip(*batch)]
+
         for i in range(len(batch)):
             try:
                 image[i] = cv2.resize(image[i], dsize=(size, size), interpolation=cv2.INTER_LINEAR)
-                mask[i]  = cv2.resize(mask[i],  dsize=(size, size), interpolation=cv2.INTER_LINEAR)
             except:
-                print("name: ",self.name)
-                print("maks.shape: ",mask[i].shape)
-        image = torch.from_numpy(np.stack(image, axis=0)).permute(0,3,1,2)
-        mask  = torch.from_numpy(np.stack(mask, axis=0)).unsqueeze(1)
+                print("name: ", self.name)
+
+        image = torch.from_numpy(np.stack(image, axis=0)).permute(0, 3, 1, 2)
+        mask = torch.from_numpy(np.stack(mask, axis=0)).unsqueeze(1)
         return image, mask
 
     def __len__(self):
         return len(self.samples)
 
 ########################### Testing Script ###########################
-if __name__=='__main__':
-    import matplotlib.pyplot as plt
-    plt.ion()
-
-    cfg  = Config(mode='train', datapath='../data/DUTS')
-    data = Data(cfg)
-    for i in range(1000):
-        image, mask = data[i]
-        image       = image*cfg.std + cfg.mean
-        plt.subplot(121)
-        plt.imshow(np.uint8(image))
-        plt.subplot(122)
-        plt.imshow(mask)
-        input()
+if __name__ == '__main__':
+    # model = ResNet()
+    # model.eval()
+    # Input = torch.randn((1, 3, 352, 352))
+    # for i in range(100):
+    #     out = model(Input)
+    #     print(out)
+    # from thop import profile, clever_format
+    # flops, params = profile(model, inputs=(Input,))
+    # flops, params = clever_format([flops, params], '%.3f')
+    # print("flops {}, params {}".format(flops, params))
+    cfg = Config(datapath='../data/', mode='test', eval_freq=1)
+    dataset = Data('../../class_data/', cfg)
+    # print(dataset.classes)
+    print(dataset.class_to_idx)
+    # print(dataset.imgs)
+    img, label = dataset[0]

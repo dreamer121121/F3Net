@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #coding=utf-8
-
+from torchvision import models
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -9,28 +9,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # from train import log_stream
-
-def weight_init(module):
-    for n, m in module.named_children():
-        print('initialize: '+n)
-        if isinstance(m, nn.Conv2d):
-            nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
-            if m.bias is not None:
-                nn.init.zeros_(m.bias)
-        elif isinstance(m, (nn.BatchNorm2d, nn.InstanceNorm2d)):
-            nn.init.ones_(m.weight)
-            if m.bias is not None:
-                nn.init.zeros_(m.bias)
-        elif isinstance(m, nn.Linear):
-            nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
-            if m.bias is not None:
-                nn.init.zeros_(m.bias)
-        elif isinstance(m, nn.Sequential):
-            weight_init(m)
-        elif isinstance(m, nn.ReLU):
-            pass
-        else:
-            m.initialize()
 
 
 class Bottleneck(nn.Module):
@@ -54,7 +32,7 @@ class Bottleneck(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self):
+    def __init__(self, num_classes):
         super(ResNet, self).__init__()
         self.inplanes = 64
         self.conv1    = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -63,6 +41,10 @@ class ResNet(nn.Module):
         self.layer2   = self.make_layer(128, 4, stride=2, dilation=1)
         self.layer3   = self.make_layer(256, 23, stride=2, dilation=1)
         self.layer4   = self.make_layer(512, 3, stride=2, dilation=1)
+        self.initialize()
+
+        self.avgpool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Linear(512 * 4, num_classes)
 
     def make_layer(self, planes, blocks, stride, dilation):
         downsample    = nn.Sequential(nn.Conv2d(self.inplanes, planes*4, kernel_size=1, stride=stride, bias=False), nn.BatchNorm2d(planes*4))
@@ -79,147 +61,32 @@ class ResNet(nn.Module):
         out3 = self.layer2(out2)
         out4 = self.layer3(out3)
         out5 = self.layer4(out4)
-        return out2, out3, out4, out5
+        out = self.avgpool(out5).view(-1, 2048)
+        out = self.fc(out)
+
+        return out
 
     def initialize(self):
         self.load_state_dict(torch.load('../res/resnet101-5d3b4d8f.pth'), strict=False)
 
 
-class CFM(nn.Module):
-    def __init__(self):
-        super(CFM, self).__init__()
-        self.conv1h = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn1h   = nn.BatchNorm2d(64)
-        self.conv2h = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn2h   = nn.BatchNorm2d(64)
-        self.conv3h = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn3h   = nn.BatchNorm2d(64)
-        self.conv4h = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn4h   = nn.BatchNorm2d(64)
-
-        self.conv1v = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn1v   = nn.BatchNorm2d(64)
-        self.conv2v = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn2v   = nn.BatchNorm2d(64)
-        self.conv3v = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn3v   = nn.BatchNorm2d(64)
-        self.conv4v = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
-        self.bn4v   = nn.BatchNorm2d(64)
-
-    def forward(self, left, down):
-        if down.size()[2:] != left.size()[2:]:
-            down = F.interpolate(down, size=left.size()[2:], mode='bilinear')
-        out1h = F.relu(self.bn1h(self.conv1h(left )), inplace=True)
-        out2h = F.relu(self.bn2h(self.conv2h(out1h)), inplace=True)
-        out1v = F.relu(self.bn1v(self.conv1v(down )), inplace=True)
-        out2v = F.relu(self.bn2v(self.conv2v(out1v)), inplace=True)
-        fuse  = out2h*out2v
-        out3h = F.relu(self.bn3h(self.conv3h(fuse )), inplace=True)+out1h
-        out4h = F.relu(self.bn4h(self.conv4h(out3h)), inplace=True)
-        out3v = F.relu(self.bn3v(self.conv3v(fuse )), inplace=True)+out1v
-        out4v = F.relu(self.bn4v(self.conv4v(out3v)), inplace=True)
-        return out4h, out4v
-
-    def initialize(self):
-        weight_init(self)
-
-
-class Decoder(nn.Module):
-    def __init__(self):
-        super(Decoder, self).__init__()
-        self.cfm45  = CFM()
-        self.cfm34  = CFM()
-        self.cfm23  = CFM()
-
-    def forward(self, out2h, out3h, out4h, out5v, fback=None):
-        if fback is not None:
-            refine5      = F.interpolate(fback, size=out5v.size()[2:], mode='bilinear')
-            refine4      = F.interpolate(fback, size=out4h.size()[2:], mode='bilinear')
-            refine3      = F.interpolate(fback, size=out3h.size()[2:], mode='bilinear')
-            refine2      = F.interpolate(fback, size=out2h.size()[2:], mode='bilinear')
-            out5v        = out5v+refine5
-            out4h, out4v = self.cfm45(out4h+refine4, out5v)
-            out3h, out3v = self.cfm34(out3h+refine3, out4v)
-            out2h, pred  = self.cfm23(out2h+refine2, out3v)
-        else:
-            out4h, out4v = self.cfm45(out4h, out5v)
-            out3h, out3v = self.cfm34(out3h, out4v)
-            out2h, pred  = self.cfm23(out2h, out3v)
-        return out2h, out3h, out4h, out5v, pred
-
-    def initialize(self):
-        weight_init(self)
-
-
-class F3Net(nn.Module):
-    def __init__(self, cfg):
-        super(F3Net, self).__init__()
-        self.cfg      = cfg
-        self.bkbone   = ResNet()
-        self.squeeze5 = nn.Sequential(nn.Conv2d(2048, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-        self.squeeze4 = nn.Sequential(nn.Conv2d(1024, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-        self.squeeze3 = nn.Sequential(nn.Conv2d( 512, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-        self.squeeze2 = nn.Sequential(nn.Conv2d( 256, 64, 1), nn.BatchNorm2d(64), nn.ReLU(inplace=True))
-
-        self.decoder1 = Decoder()
-        self.decoder2 = Decoder()
-        self.linearp1 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
-        self.linearp2 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
-
-        self.linearr2 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
-        self.linearr3 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
-        self.linearr4 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
-        self.linearr5 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
-
-
-        self.initialize()
-
-    def forward(self, x, shape=None):
-        out2h, out3h, out4h, out5v        = self.bkbone(x)
-        out2h, out3h, out4h, out5v        = self.squeeze2(out2h), self.squeeze3(out3h), self.squeeze4(out4h), self.squeeze5(out5v)
-        out2h, out3h, out4h, out5v, pred1 = self.decoder1(out2h, out3h, out4h, out5v)
-        out2h, out3h, out4h, out5v, pred2 = self.decoder2(out2h, out3h, out4h, out5v, pred1)
-
-        shape = x.size()[2:] if shape is None else shape
-        pred1 = F.interpolate(self.linearp1(pred1), size=shape, mode='bilinear')
-        pred2 = F.interpolate(self.linearp2(pred2), size=shape, mode='bilinear')
-
-        out2h = F.interpolate(self.linearr2(out2h), size=shape, mode='bilinear')
-        out3h = F.interpolate(self.linearr3(out3h), size=shape, mode='bilinear')
-        out4h = F.interpolate(self.linearr4(out4h), size=shape, mode='bilinear')
-        out5h = F.interpolate(self.linearr5(out5v), size=shape, mode='bilinear')
-        return pred1, pred2, out2h, out3h, out4h, out5h
-
-
-    def initialize(self):
-        if self.cfg.snapshot: #finetune
-            if os.path.isfile(self.cfg.snapshot):
-                print('=> loading checkpoint {} \n'.format(self.cfg.snapshot))
-            checkpoints = torch.load(self.cfg.snapshot)['state_dict']
-            #checkpoints = torch.load(self.cfg.snapshot)
-            fielter_checkpoints = dict()
-            for k,v in checkpoints.items():
-                if "module" in k:
-                    fielter_checkpoints[k[7:]] = v
-                else:
-                    fielter_checkpoints[k] = v
-            #print(fielter_checkpoints.keys())
-            #import sys
-            #sys.exit(0)
-            self.load_state_dict(fielter_checkpoints)
-            #import sys
-            #sys.exit(0)
-        else:
-            weight_init(self)
 if __name__ == '__main__':
-    import datetime
-    cfg = None
-    model = F3Net(cfg)
-    model.eval()
-    Input = torch.randn((1,3,352,352))
-    for i in range(1000):
-        out = model(Input)
+    # model = ResNet()
+    # model.eval()
+    # Input = torch.randn((1, 3, 352, 352))
+    # for i in range(100):
+    #     out = model(Input)
+    #     print(out)
     # from thop import profile, clever_format
     # flops, params = profile(model, inputs=(Input,))
     # flops, params = clever_format([flops, params], '%.3f')
     # print("flops {}, params {}".format(flops, params))
+    dataset = Data('../../class_data/')
+    # print(dataset.classes)
+    # print(dataset.class_to_idx)
+    # print(dataset.imgs)
+    print(dataset[0])
+
+
+
+
