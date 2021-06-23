@@ -191,7 +191,8 @@ class Test(object):
 
                 mask = cv2.morphologyEx(img_thr, cv2.MORPH_OPEN, k)
 
-                mask = cv2.blur(mask, (5, 5))
+                mask = cv2.blur(mask, (3, 3))
+
 
 
                 # kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
