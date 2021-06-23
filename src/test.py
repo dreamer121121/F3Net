@@ -145,7 +145,7 @@ class Test(object):
     def deploy(self):
 
         normalize = Normalize(mean=self.cfg.mean, std=self.cfg.std)
-        resize = Resize(640, 640)
+        resize = Resize(416, 416)
         totensor = ToTensor()
 
         fr = open(self.path+'/test.txt', 'r')
@@ -179,6 +179,7 @@ class Test(object):
             out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
 
             mask = (torch.sigmoid(out2u[0, 0]) * 255).cpu().numpy()
+            k = np.ones((3, 3), np.uint8)
             # if args.crf:
             #     Q = self.dense_crf(user_image.astype(np.uint8), pred.cpu().numpy())
             #     print('--Q--', Q)
@@ -188,7 +189,10 @@ class Test(object):
             if args.erd:
                 ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
 
-                mask = cv2.blur(img_thr, (5, 5))
+                mask = cv2.morphologyEx(img_thr, cv2.MORPH_OPEN, k)
+
+                mask = cv2.blur(mask, (5, 5))
+
 
                 # kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
                 #
