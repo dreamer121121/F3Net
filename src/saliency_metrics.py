@@ -64,7 +64,6 @@ class cal_mae(object):
         self.prediction = []
 
     def update(self, pred, gt):
-        print('---update mae-----')
         score = self.cal(pred, gt)
         self.prediction.append(score)
 
