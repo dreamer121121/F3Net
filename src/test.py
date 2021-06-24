@@ -115,7 +115,7 @@ class Test(object):
             import datetime
             #start = datetime.datetime.now()
             cnt = 1
-            total = datetime.datetime(1999,1,1)
+            total = datetime.datetime(1999, 1, 1)
 
             for image, mask, shape, name in self.loader:
                 #image.shape (1,3,352,352)
@@ -127,7 +127,14 @@ class Test(object):
                 total += datetime.datetime.now()-start
                 print("inference time: ", (total-datetime.datetime(1999,1,1))/cnt)
                 out   = out2u
-                pred  = (torch.sigmoid(out[0,0])*255).cpu().numpy()
+                mask  = (torch.sigmoid(out[0,0])*255).cpu().numpy()
+                k = np.ones((3, 3), np.uint8)
+                ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
+
+                mask = cv2.morphologyEx(img_thr, cv2.MORPH_OPEN, k)
+
+                mask = cv2.blur(mask, (3, 3))
+
                 #
                 # Q = None
                 # if args.crf:
@@ -135,7 +142,7 @@ class Test(object):
                 head  = '../eval/maps/F3Net/'+ self.cfg.datapath.split('/')[-1]
                 if not os.path.exists(head):
                     os.makedirs(head)
-                cv2.imwrite(head+'/'+name[0]+'.png', np.round(pred))
+                cv2.imwrite(head+'/'+name[0]+'.png', np.round(mask))
                 # import sys
                 # sys.exit(0)
                 #print("inference time: ",(datetime.datetime.now()-start)/cnt)
