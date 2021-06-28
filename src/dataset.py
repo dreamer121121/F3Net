@@ -153,7 +153,7 @@ class Data(Dataset):
             return image, mask, shape, name
 
     def collate(self, batch):
-        size = 512
+        size = 416
         image, mask = [list(item) for item in zip(*batch)]
         for i in range(len(batch)):
             try:
@@ -162,7 +162,7 @@ class Data(Dataset):
             except:
                 print("name: ",self.name)
                 print("maks.shape: ",mask[i].shape)
-        image = torch.from_numpy(np.stack(image, axis=0)).permute(0,3,1,2)
+        image = torch.from_numpy(np.stack(image, axis=0)).permute(0, 3, 1, 2)
         mask  = torch.from_numpy(np.stack(mask, axis=0)).unsqueeze(1)
         return image, mask
 

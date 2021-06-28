@@ -183,21 +183,34 @@ def Lapyramid_loss(pred, target):
     return tmp[:, :, np.newaxis]
 
 
-def structure_loss(pred, mask, sw=None):
-    # wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
-    # wbce  = (weit*wbce).sum(dim=(2,3))/weit.sum(dim=(2,3))
-    #
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2, weight=None, ignore_index=255):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.weight = weight
+        self.ignore_index = ignore_index
+        self.bce_fn = nn.BCEWithLogitsLoss(weight=self.weight)
 
+    def forward(self, preds, labels):
+        if self.ignore_index is not None:
+            mask = labels != self.ignore
+            labels = labels[mask]
+            preds = preds[mask]
+
+        logpt = -self.bce_fn(preds, labels)
+        pt = torch.exp(logpt)
+        loss = -((1 - pt) ** self.gamma) * self.alpha * logpt
+        return loss
+
+
+def structure_loss(pred, mask, sw=None):
     # add cortor loss
     N, C, W, H = mask.shape
-    # kernal = np.ones((5, 5), np.uint8)
-    loss_lap_tmp = np.zeros([N, W, H, C])
     mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
     for i in range(N):
         f_mask = mask[i, :, :, :]
-        f_pred = torch.sigmoid(pred[i, :, :, :])
         f_mask_img = tensor2im(f_mask)
-        f_mask_pred = tensor2im(f_pred)
         # e_y = cv2.erode(f_mask_img, kernel=kernal, iterations=1)
         # # d_y = cv2.dilate(f_mask_img, kernel=kernal, iterations=1)
         # m_c = cv2.GaussianBlur(5 * (f_mask_img[:, :, 0] - e_y), (5, 5), 0)
@@ -206,22 +219,12 @@ def structure_loss(pred, mask, sw=None):
         if transition.sum() == 0:
             transition = np.ones((W, H, C))
         mc_matrix[i, :, :, :] =  transition[:, :, :]
-        loss_lap_tmp[i, :, :, :] = Lapyramid_loss(f_mask_pred, f_mask_img)
 
     # L = np.ones((N, W, H, C))
     W = im2tensor(mc_matrix).cuda()
-    loss_lap_tmp = im2tensor(loss_lap_tmp).cuda()
-
-    loss_lap = (loss_lap_tmp * W).sum(dim=(2, 3)) / W.sum(dim=(2, 3))
     loss_alpha = torch.sqrt(
         torch.square((mask - torch.sigmoid(pred)) * W) + torch.square(torch.Tensor([1e-6]).cuda())).sum(
         dim=(2, 3)) / W.sum(dim=(2, 3))
-
-    if sw:
-        sw.add_scalar('alpha_loss', loss_alpha.mean().item(), global_step=global_step)
-        sw.add_scalar('loss_lap', loss_lap.mean().item(), global_step=global_step)
-        print('--loss_alpha--', loss_alpha.mean())
-        print('--loss_lap---', loss_lap.mean())
 
     weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
     wbce = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
@@ -232,7 +235,16 @@ def structure_loss(pred, mask, sw=None):
     union = ((pred + mask) * weit).sum(dim=(2, 3))
     wiou = 1 - (inter + 1) / (union - inter + 1)
 
-    return (wiou + wbce + loss_alpha + loss_lap).mean()
+    #focal loss
+    focus = FocalLoss()
+    focal_loss = focus(pred, mask)
+    print('----focal loss----', focal_loss.size())
+
+    if sw:
+        sw.add_scalar('alpha_loss', loss_alpha.mean().item(), global_step=global_step)
+        print('--loss_alpha--', loss_alpha.mean())
+
+    return (wiou + wbce + loss_alpha).mean()
 
 
 def main(Dataset, Network):
