@@ -153,7 +153,7 @@ class Data(Dataset):
             return image, mask, shape, name
 
     def collate(self, batch):
-        size = 416
+        size = [224, 256, 288, 320, 352, 384, 416, 448][np.random.randint(0, 8)]
         image, mask = [list(item) for item in zip(*batch)]
         for i in range(len(batch)):
             try:

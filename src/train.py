@@ -184,25 +184,25 @@ def Lapyramid_loss(pred, target):
 
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=0.25, gamma=2, weight=None, ignore_index=255):
+    def __init__(self, alpha=1, gamma=2, logits=False, reduce=True):
         super(FocalLoss, self).__init__()
         self.alpha = alpha
         self.gamma = gamma
-        self.weight = weight
-        self.ignore_index = ignore_index
-        self.bce_fn = nn.BCEWithLogitsLoss(weight=self.weight)
+        self.logits = logits
+        self.reduce = reduce
 
-    def forward(self, preds, labels):
-        if self.ignore_index is not None:
-            mask = labels != self.ignore
-            labels = labels[mask]
-            preds = preds[mask]
+    def forward(self, inputs, targets):
+        if self.logits:
+            BCE_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduce=False)
+        else:
+            BCE_loss = F.binary_cross_entropy(inputs, targets, reduce=False)
+        pt = torch.exp(-BCE_loss)
+        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
 
-        logpt = -self.bce_fn(preds, labels)
-        pt = torch.exp(logpt)
-        loss = -((1 - pt) ** self.gamma) * self.alpha * logpt
-        return loss
-
+        if self.reduce:
+            return torch.mean(F_loss)
+        else:
+            return F_loss
 
 def structure_loss(pred, mask, sw=None):
     # add cortor loss
@@ -238,13 +238,14 @@ def structure_loss(pred, mask, sw=None):
     #focal loss
     focus = FocalLoss()
     focal_loss = focus(pred, mask)
-    print('----focal loss----', focal_loss.size())
 
     if sw:
         sw.add_scalar('alpha_loss', loss_alpha.mean().item(), global_step=global_step)
+        sw.add_scalar('focal loss', focal_loss.mean().item(), global_step=global_step)
         print('--loss_alpha--', loss_alpha.mean())
+        print('---focal loss---', focal_loss)
 
-    return (wiou + wbce + loss_alpha).mean()
+    return (wiou + wbce + loss_alpha).mean()+focal_loss
 
 
 def main(Dataset, Network):
@@ -284,6 +285,10 @@ def main(Dataset, Network):
     net = nn.DataParallel(net, device_ids=[0, 1, 2, 3])
     net.cuda()
 
+    if args.resume:
+        global global_step
+        global_step = torch.load(args.resume)['step']
+
     if args.eval:
         evaluate(net, eval_dataloader)
 
@@ -295,7 +300,7 @@ def main(Dataset, Network):
         train(net, optimizer, train_dataloader, sw, epoch, train_cfg)
 
         if (epoch + 1) % eval_cfg.eval_freq == 0 or epoch == train_cfg.epochs - 1:
-            mae = evaluate(net, eval_dataloader)
+            mae, loss = evaluate(net, eval_dataloader)
 
             global best_mae
             is_best = mae < best_mae
@@ -305,9 +310,10 @@ def main(Dataset, Network):
                 'epoch': epoch + 1,
                 'state_dict': net.state_dict(),
                 'best_mae': best_mae,
+                'step': global_step
             }, is_best, epoch, train_cfg)
 
-            log_stream.write('Valid MAE: {:.4f}\n'.format(mae))
+            log_stream.write('Valid MAE: {:.4f} Valid Loss: {:.4f}\n'.format(mae, loss))
             log_stream.flush()
 
 
@@ -319,16 +325,16 @@ def evaluate(net, loader):
     with torch.no_grad():
         for image, mask, shape, name in loader:
             image = image.cuda().float()
-            # mask_1 = torch.unsqueeze(mask, dim=0).cuda().float()
+            mask_1 = torch.unsqueeze(mask, dim=0).cuda().float()
             out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
-            # loss1u = structure_loss(out1u, mask_1)
-            # loss2u = structure_loss(out2u, mask_1)
-            #
-            # loss2r = structure_loss(out2r, mask_1)
-            # loss3r = structure_loss(out3r, mask_1)
-            # loss4r = structure_loss(out4r, mask_1)
-            # loss5r = structure_loss(out5r, mask_1)
-            # loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
+            loss1u = structure_loss(out1u, mask_1)
+            loss2u = structure_loss(out2u, mask_1)
+
+            loss2r = structure_loss(out2r, mask_1)
+            loss3r = structure_loss(out3r, mask_1)
+            loss4r = structure_loss(out4r, mask_1)
+            loss5r = structure_loss(out5r, mask_1)
+            loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
 
             out = out2u
             pred = (torch.sigmoid(out[0, 0])).cpu().numpy()
@@ -345,10 +351,10 @@ def evaluate(net, loader):
             else:
                 pred = (pred - pred.min()) / (pred.max() - pred.min())
             mae.update(pred, mask)
-            # Loss += loss
+            Loss += loss
         Mae = mae.show()
 
-    return Mae
+    return Mae, Loss/(len(loader))
 
 
 def train(net, optimizer, loader, sw, epoch, cfg):
