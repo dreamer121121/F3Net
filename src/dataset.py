@@ -136,7 +136,7 @@ class Data(Dataset):
 
         shape = mask.shape
 
-        if self.cfg.mode=='train':
+        if self.cfg.mode=='train' or self.cfg.mode=='eval':
             # encode = [True, False][np.random.randint(0, 2)]
             # if encode:
             #     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), random.randrange(35, 90, 5)]

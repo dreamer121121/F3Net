@@ -256,7 +256,7 @@ def main(Dataset, Network):
                                batch=args.batch_size,
                                lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
-    eval_cfg = Dataset.Config(datapath='../data/' + args.dataset, mode='test', eval_freq=1)
+    eval_cfg = Dataset.Config(datapath='../data/' + args.dataset, mode='eval', batch=args.batch_size, eval_freq=1)
 
     train_data = Dataset.Data(train_cfg)
 
@@ -264,7 +264,7 @@ def main(Dataset, Network):
 
     train_dataloader = DataLoader(train_data, collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True,
                                   num_workers=16)
-    eval_dataloader = DataLoader(eval_data, batch_size=1, shuffle=False, num_workers=16)
+    eval_dataloader = DataLoader(eval_data, collate_fn=eval_data.collate, batch_size=eval_cfg.batch, shuffle=False, num_workers=16)
 
     net = Network(train_cfg)
     net.train(True)
@@ -285,8 +285,8 @@ def main(Dataset, Network):
     net = nn.DataParallel(net, device_ids=[0, 1, 2, 3])
     net.cuda()
 
+    global global_step
     if args.resume:
-        global global_step
         global_step = torch.load(args.resume)['step']
 
     if args.eval:
@@ -315,18 +315,20 @@ def main(Dataset, Network):
 
             log_stream.write('Valid MAE: {:.4f} Valid Loss: {:.4f}\n'.format(mae, loss))
             log_stream.flush()
+            sw.add_scalar('eval loss', loss, global_step=epoch+1)
 
 
 def evaluate(net, loader):
     Loss = 0.0
     mae = cal_mae()
     net.eval()
+    cnt = 1
 
     with torch.no_grad():
-        for image, mask, shape, name in loader:
+        for image, mask in loader:
             image = image.cuda().float()
-            mask_1 = torch.unsqueeze(mask, dim=0).cuda().float()
-            out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
+            mask_1 = mask.cuda().float()
+            out1u, out2u, out2r, out3r, out4r, out5r = net(image)
             loss1u = structure_loss(out1u, mask_1)
             loss2u = structure_loss(out2u, mask_1)
 
@@ -351,10 +353,12 @@ def evaluate(net, loader):
             else:
                 pred = (pred - pred.min()) / (pred.max() - pred.min())
             mae.update(pred, mask)
+            print('---eval loss---', loss)
+            cnt += 1
             Loss += loss
         Mae = mae.show()
 
-    return Mae, Loss/(len(loader))
+    return Mae, Loss/cnt
 
 
 def train(net, optimizer, loader, sw, epoch, cfg):
