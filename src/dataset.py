@@ -147,7 +147,7 @@ class Data(Dataset):
             image, mask = self.randomflip(image, mask)
             return image, mask
 
-        elif self.cfg.mode ==' eval':
+        elif self.cfg.mode == 'eval':
             image, mask = self.normalize(image, mask)
             image, mask = self.resize(image, mask, self.cfg.mode)
             image, mask = self.totensor(image, mask)
@@ -160,7 +160,7 @@ class Data(Dataset):
             return image, mask, shape, name
 
     def collate(self, batch):
-        size = [224, 256, 288, 320, 352, 384, 416, 448][np.random.randint(0, 8)]
+        size = [224, 256, 288, 320, 352, 384, 416][np.random.randint(0, 7)]
         image, mask = [list(item) for item in zip(*batch)]
         for i in range(len(batch)):
             try:
