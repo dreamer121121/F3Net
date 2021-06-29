@@ -53,8 +53,8 @@ class Resize(object):
         self.H = H
         self.W = W
 
-    def __call__(self, image, mask,mode='train'):
-        if mode == 'train':
+    def __call__(self, image, mask, mode='train'):
+        if mode == 'eval':
             image = cv2.resize(image, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
             mask  = cv2.resize( mask, dsize=(self.W, self.H), interpolation=cv2.INTER_LINEAR)
             return image, mask
@@ -136,7 +136,7 @@ class Data(Dataset):
 
         shape = mask.shape
 
-        if self.cfg.mode=='train' or self.cfg.mode=='eval':
+        if self.cfg.mode=='train':
             # encode = [True, False][np.random.randint(0, 2)]
             # if encode:
             #     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), random.randrange(35, 90, 5)]
@@ -146,6 +146,13 @@ class Data(Dataset):
             image, mask = self.randomcrop(image, mask)
             image, mask = self.randomflip(image, mask)
             return image, mask
+
+        elif self.cfg.mode ==' eval':
+            image, mask = self.normalize(image, mask)
+            image, mask = self.resize(image, mask, self.cfg.mode)
+            image, mask = self.totensor(image, mask)
+            return image, mask
+
         else:
             image, mask = self.normalize(image, mask)
             image, mask = self.resize(image, mask, self.cfg.mode)

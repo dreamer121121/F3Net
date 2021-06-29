@@ -264,7 +264,7 @@ def main(Dataset, Network):
 
     train_dataloader = DataLoader(train_data, collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True,
                                   num_workers=16)
-    eval_dataloader = DataLoader(eval_data, collate_fn=eval_data.collate, batch_size=eval_cfg.batch, shuffle=False, num_workers=16)
+    eval_dataloader = DataLoader(eval_data, batch_size=eval_cfg.batch, shuffle=False, num_workers=16)
 
     net = Network(train_cfg)
     net.train(True)
@@ -288,6 +288,7 @@ def main(Dataset, Network):
     global global_step
     if args.resume:
         global_step = torch.load(args.resume)['step']
+    print(global_step)
 
     if args.eval:
         evaluate(net, eval_dataloader)
