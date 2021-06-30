@@ -157,6 +157,7 @@ class Data(Dataset):
             image, mask = self.normalize(image, mask)
             image, mask = self.resize(image, mask, self.cfg.mode)
             image, mask = self.totensor(image, mask)
+
             return image, mask, shape, name
 
     def collate(self, batch):

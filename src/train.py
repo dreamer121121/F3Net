@@ -257,7 +257,7 @@ def main(Dataset, Network):
                                batch=args.batch_size,
                                lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
-    eval_cfg = Dataset.Config(datapath='../data/' + args.dataset, mode='eval', batch=args.batch_size, eval_freq=1)
+    eval_cfg = Dataset.Config(datapath='../data/' + args.dataset, mode='test', batch=1, eval_freq=1)
 
     train_data = Dataset.Data(train_cfg)
 
@@ -315,7 +315,7 @@ def main(Dataset, Network):
                 'step': global_step
             }, is_best, epoch, train_cfg)
 
-            log_stream.write('Valid MAE: {:.4f} Valid IOU Valid Loss: {:.4f}\n'.format(mae, iou, loss))
+            log_stream.write('Valid MAE: {:.4f} Valid IOU: {:.4f} Valid Loss: {:.4f}\n'.format(mae, iou, loss))
             log_stream.flush()
             sw.add_scalar('eval loss', loss, global_step=epoch+1)
 
@@ -327,11 +327,11 @@ def evaluate(net, loader):
     net.eval()
 
     with torch.no_grad():
-        for image, mask in loader:
+        for image, mask, shape, name in loader:
             image = image.cuda().float()
             mask_1 = mask.unsqueeze(dim=1).cuda().float()
             print('--mask--', mask_1.size())
-            out1u, out2u, out2r, out3r, out4r, out5r = net(image)
+            out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
             loss1u = structure_loss(out1u, mask_1)
             loss2u = structure_loss(out2u, mask_1)
 
