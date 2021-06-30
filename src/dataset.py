@@ -147,11 +147,11 @@ class Data(Dataset):
             image, mask = self.randomflip(image, mask)
             return image, mask
 
-        elif self.cfg.mode == 'eval':
-            image, mask = self.normalize(image, mask)
-            image, mask = self.resize(image, mask, self.cfg.mode)
-            image, mask = self.totensor(image, mask)
-            return image, mask
+        # elif self.cfg.mode == 'eval':
+        #     image, mask = self.normalize(image, mask)
+        #     image, mask = self.resize(image, mask, self.cfg.mode)
+        #     image, mask = self.totensor(image, mask)
+        #     return image, mask
 
         else:
             image, mask = self.normalize(image, mask)

@@ -21,12 +21,13 @@ import shutil
 import argparse
 
 import cv2
-from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm
+from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm, cal_iou
 
 log_stream = open('train.log', 'a')
 
 global_step = 0
 best_mae = float('inf')
+best_iou = 0.0
 
 
 def parse_args():
@@ -301,20 +302,20 @@ def main(Dataset, Network):
         train(net, optimizer, train_dataloader, sw, epoch, train_cfg)
 
         if (epoch + 1) % eval_cfg.eval_freq == 0 or epoch == train_cfg.epochs - 1:
-            mae, loss = evaluate(net, eval_dataloader)
+            mae, iou, loss = evaluate(net, eval_dataloader)
 
-            global best_mae
-            is_best = mae < best_mae
-            best_mae = min(mae, best_mae)
+            global best_iou
+            is_best = iou > best_iou
+            best_iou = max(iou, best_iou)
 
             save_checkpoints({
                 'epoch': epoch + 1,
                 'state_dict': net.state_dict(),
-                'best_mae': best_mae,
+                'best_iou': best_iou,
                 'step': global_step
             }, is_best, epoch, train_cfg)
 
-            log_stream.write('Valid MAE: {:.4f} Valid Loss: {:.4f}\n'.format(mae, loss))
+            log_stream.write('Valid MAE: {:.4f} Valid IOU Valid Loss: {:.4f}\n'.format(mae, iou, loss))
             log_stream.flush()
             sw.add_scalar('eval loss', loss, global_step=epoch+1)
 
@@ -322,8 +323,8 @@ def main(Dataset, Network):
 def evaluate(net, loader):
     Loss = 0.0
     mae = cal_mae()
+    iou = cal_iou()
     net.eval()
-    cnt = 1
 
     with torch.no_grad():
         for image, mask in loader:
@@ -355,12 +356,14 @@ def evaluate(net, loader):
             else:
                 pred = (pred - pred.min()) / (pred.max() - pred.min())
             mae.update(pred, mask)
+            iou.update(pred, mask)
             print('---eval loss---', loss)
-            cnt += 1
             Loss += loss
         Mae = mae.show()
+        Iou = iou.show()
+        print('---iou---', Iou)
 
-    return Mae, Loss/cnt
+    return Mae, Iou, Loss/len(loader)
 
 
 def train(net, optimizer, loader, sw, epoch, cfg):
