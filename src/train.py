@@ -23,6 +23,10 @@ import argparse
 import cv2
 from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm, cal_iou
 
+from smoothing import gaussian_blur
+
+import torch.nn.functional as F
+
 log_stream = open('train.log', 'a')
 
 global_step = 0
@@ -114,101 +118,17 @@ def generate_trimap(mask):
     return unknown / 255
 
 
-def structure_lossnewtrimap(pred, mask):
-    # wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
-    # wbce  = (weit*wbce).sum(dim=(2,3))/weit.sum(dim=(2,3))
-    #
-
-    # add cortor loss
-    N, C, W, H = mask.shape
-
-    mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
-    for i in range(N):
-        f_mask = mask[i, :, :, :]
-        f_mask_img = tensor2im(f_mask)
-        transition = generate_trimap(f_mask_img * 255)
-        if transition.sum() == 0:
-            transition = np.ones((W, H, C))
-        mc_matrix[i, :, :, :] = transition[:, :, :]
-
-    W = im2tensor(mc_matrix).cuda()
-    loss_alpha = torch.sqrt(
-        torch.square((mask - torch.sigmoid(pred)) * W) + torch.square(torch.Tensor([1e-6]).cuda())).sum(
-        dim=(2, 3)) / W.sum(dim=(2, 3))
-
-    print('--loss_alpha--', loss_alpha.mean())
-    weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
-    wbce = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
-    wbce = (weit * wbce).sum(dim=(2, 3)) / weit.sum(dim=(2, 3))
-
-    pred = torch.sigmoid(pred)
-    inter = ((pred * mask) * weit).sum(dim=(2, 3))
-    union = ((pred + mask) * weit).sum(dim=(2, 3))
-    wiou = 1 - (inter + 1) / (union - inter + 1)
-
-    return (wiou + wbce + loss_alpha).mean()
-
-
-def gaussian(ori_image, down_times=5):
-    # 1：添加第一个图像为原始图像
-    temp_gau = ori_image.copy()
-    gaussian_pyramid = [temp_gau]
-    for i in range(down_times):
-        # 2：连续存储5次下采样，这样高斯金字塔就有6层
-        temp_gau = cv2.pyrDown(temp_gau)
-        gaussian_pyramid.append(temp_gau)
-    return gaussian_pyramid
-
-
-def laplacian(gaussian_pyramid, up_times=5):
-    laplacian_pyramid = [gaussian_pyramid[-1]]
-
-    for i in range(up_times, 0, -1):
-        # i的取值为5,4,3,2,1,0也就是拉普拉斯金字塔有6层
-        temp_pyrUp = cv2.pyrUp(gaussian_pyramid[i])
-        temp_lap = cv2.subtract(gaussian_pyramid[i - 1], temp_pyrUp)
-        laplacian_pyramid.append(temp_lap)
-    return laplacian_pyramid
-
-
-def Lapyramid_loss(pred, target):
-    lap_pyramid_pred = laplacian(gaussian(pred))
-    lap_pyramid_target = laplacian(gaussian(target))
-
-    W, H, C = pred.shape
-    new_lap_pyramid_pred = [cv2.resize(item, (W, H)) for item in lap_pyramid_pred]
-    new_lap_pyramid_target = [cv2.resize(item, (W, H)) for item in lap_pyramid_target]
-    tmp = np.zeros((W, H))
-    for i in range(1, 6):
-        tmp += abs(new_lap_pyramid_pred[i] - new_lap_pyramid_target[i])
-    return tmp[:, :, np.newaxis]
-
-
-class FocalLoss(nn.Module):
-    def __init__(self, alpha=1, gamma=2, logits=False, reduce=True):
-        super(FocalLoss, self).__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        self.logits = logits
-        self.reduce = reduce
-
-    def forward(self, inputs, targets):
-        if self.logits:
-            BCE_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduce=False)
-        else:
-            BCE_loss = F.binary_cross_entropy(inputs, targets, reduce=False)
-        pt = torch.exp(-BCE_loss)
-        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
-
-        if self.reduce:
-            return torch.mean(F_loss)
-        else:
-            return F_loss
-
 def structure_loss(pred, mask, sw=None):
     # add cortor loss
     N, C, W, H = mask.shape
     mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
+
+    #cal smooth loss
+    smoothed_mask = gaussian_blur(
+        mask.unsqueeze(dim=1), (9, 9), (2.5, 2.5)).squeeze(dim=1)
+    smooth_loss = F.mse_loss(pred, smoothed_mask)
+
+    print('---smooth loss---', smooth_loss)
     for i in range(N):
         f_mask = mask[i, :, :, :]
         f_mask_img = tensor2im(f_mask)
@@ -237,16 +157,14 @@ def structure_loss(pred, mask, sw=None):
     wiou = 1 - (inter + 1) / (union - inter + 1)
 
     #focal loss
-    focus = FocalLoss()
-    focal_loss = focus(pred, mask)
+    # focus = FocalLoss()
+    # focal_loss = focus(pred, mask)
 
     if sw:
         sw.add_scalar('alpha_loss', loss_alpha.mean().item(), global_step=global_step)
-        sw.add_scalar('focal loss', focal_loss.mean().item(), global_step=global_step)
         print('--loss_alpha--', loss_alpha.mean())
-        print('---focal loss---', focal_loss)
 
-    return (wiou + wbce + loss_alpha).mean()+focal_loss
+    return (wiou + wbce + loss_alpha).mean()
 
 
 def main(Dataset, Network):
