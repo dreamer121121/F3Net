@@ -124,11 +124,9 @@ def structure_loss(pred, mask, sw=None):
     mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
 
     #cal smooth loss
-    smoothed_mask = gaussian_blur(
-        mask.unsqueeze(dim=1), (9, 9), (2.5, 2.5)).squeeze(dim=1)
-    smooth_loss = F.mse_loss(pred, smoothed_mask)
+    smoothed_mask = gaussian_blur(mask, (9, 9), (2.5, 2.5))
+    smooth_loss = 5 * F.mse_loss(torch.sigmoid(pred), smoothed_mask)
 
-    print('---smooth loss---', smooth_loss)
     for i in range(N):
         f_mask = mask[i, :, :, :]
         f_mask_img = tensor2im(f_mask)
@@ -163,8 +161,10 @@ def structure_loss(pred, mask, sw=None):
     if sw:
         sw.add_scalar('alpha_loss', loss_alpha.mean().item(), global_step=global_step)
         print('--loss_alpha--', loss_alpha.mean())
+        print('--smooth loss--', smooth_loss)
+        sw.add_scalar('smooth_loss', smooth_loss.item(), global_step=global_step)
 
-    return (wiou + wbce + loss_alpha).mean()
+    return (wiou + wbce + loss_alpha).mean() + smooth_loss
 
 
 def main(Dataset, Network):
