@@ -127,7 +127,7 @@ def structure_loss(pred, mask):
         f_mask_img = tensor2im(f_mask)
         transition = generate_trimap(f_mask_img * 255)
         if transition.sum() == 0:
-            transition = np.ones(W, H, C)
+            transition = np.ones((W, H, C))
         mc_matrix[i, :, :, :] = transition[:, :, :]
 
     W = im2tensor(mc_matrix).cuda()
