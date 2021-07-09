@@ -152,7 +152,7 @@ class Data(Dataset):
 
 
     def collate(self, batch):
-        size = [224, 256, 288, 320, 352][np.random.randint(0, 5)]
+        size = [224, 256, 288, 320, 352, 384, 416][np.random.randint(0, 7)]
         image, target = [list(item) for item in zip(*batch)]
         for i in range(len(batch)):
             try:
@@ -164,7 +164,6 @@ class Data(Dataset):
         image = torch.from_numpy(np.stack(image, axis=0)).permute(0, 3, 1, 2)
         target  = torch.from_numpy(np.stack(target, axis=0)).permute(0, 3, 1, 2)
         return image, target
-
 
     def __len__(self):
         return len(self.samples)

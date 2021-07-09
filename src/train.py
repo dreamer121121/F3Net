@@ -19,14 +19,19 @@ import dataset
 from net import F3Net
 import shutil
 import argparse
+
 import cv2
+from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm, cal_iou
 
-from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm
+from smoothing import gaussian_blur
 
-log_stream = open('train_PPM.log', 'a')
+import torch.nn.functional as F
+
+log_stream = open('train.log', 'a')
 
 global_step = 0
 best_mae = float('inf')
+best_iou = 0.0
 
 
 def parse_args():
@@ -113,74 +118,29 @@ def generate_trimap(mask):
     return unknown / 255
 
 
-def gaussian(ori_image, down_times=5):
-    # 1：添加第一个图像为原始图像
-    temp_gau = ori_image.copy()
-    gaussian_pyramid = [temp_gau]
-    for i in range(down_times):
-        # 2：连续存储5次下采样，这样高斯金字塔就有6层
-        temp_gau = cv2.pyrDown(temp_gau)
-        gaussian_pyramid.append(temp_gau)
-    return gaussian_pyramid
-
-
-def laplacian(gaussian_pyramid, up_times=5):
-    laplacian_pyramid = [gaussian_pyramid[-1]]
-
-    for i in range(up_times, 0, -1):
-        # i的取值为5,4,3,2,1,0也就是拉普拉斯金字塔有6层
-        temp_pyrUp = cv2.pyrUp(gaussian_pyramid[i])
-        temp_lap = cv2.subtract(gaussian_pyramid[i - 1], temp_pyrUp)
-        laplacian_pyramid.append(temp_lap)
-    return laplacian_pyramid
-
-
-def Lapyramid_loss(pred, target):
-    lap_pyramid_pred = laplacian(gaussian(pred))
-    lap_pyramid_target = laplacian(gaussian(target))
-
-    W, H, C = pred.shape
-    new_lap_pyramid_pred = [cv2.resize(item, (W, H)) for item in lap_pyramid_pred]
-    new_lap_pyramid_target = [cv2.resize(item, (W, H)) for item in lap_pyramid_target]
-    for item in new_lap_pyramid_target:
-        print(item.shape)
-    tmp = np.zeros((W, H))
-    for i in range(1, 6):
-        tmp += abs(new_lap_pyramid_pred[i] - new_lap_pyramid_target[i])
-    return tmp[:, :, np.newaxis]
-
-
-def structure_loss(pred, mask):
-    # wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
-    # wbce  = (weit*wbce).sum(dim=(2,3))/weit.sum(dim=(2,3))
-    #
-
+def structure_loss(pred, mask, sw=None):
     # add cortor loss
     N, C, W, H = mask.shape
-    loss_lap_tmp = np.zeros([N, W, H, C])
-
     mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
+
     for i in range(N):
         f_mask = mask[i, :, :, :]
-        f_pred = torch.sigmoid(pred[i, :, :, :])
         f_mask_img = tensor2im(f_mask)
-        f_mask_pred = tensor2im(f_pred)
+        # e_y = cv2.erode(f_mask_img, kernel=kernal, iterations=1)
+        # # d_y = cv2.dilate(f_mask_img, kernel=kernal, iterations=1)
+        # m_c = cv2.GaussianBlur(5 * (f_mask_img[:, :, 0] - e_y), (5, 5), 0)
+        # m_c = m_c[:, :, np.newaxis]
         transition = generate_trimap(f_mask_img * 255)
         if transition.sum() == 0:
-            transition = np.ones(W, H, C)
-        mc_matrix[i, :, :, :] = transition[:, :, :]
-        loss_lap_tmp[i, :, :, :] = Lapyramid_loss(f_mask_pred, f_mask_img)
+            transition = np.ones((W, H, C))
+        mc_matrix[i, :, :, :] =  transition[:, :, :]
 
+
+    # L = np.ones((N, W, H, C))
     W = im2tensor(mc_matrix).cuda()
-    loss_lap_tmp = im2tensor(loss_lap_tmp).cuda()
-
-    loss_lap = (loss_lap_tmp * W).sum(dim=(2, 3)) / W.sum(dim=(2, 3))
     loss_alpha = torch.sqrt(
         torch.square((mask - torch.sigmoid(pred)) * W) + torch.square(torch.Tensor([1e-6]).cuda())).sum(
         dim=(2, 3)) / W.sum(dim=(2, 3))
-
-    print('--loss_alpha--', loss_alpha.mean())
-    print('--loss_lap---', loss_lap.mean())
 
     weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
     wbce = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
@@ -191,19 +151,26 @@ def structure_loss(pred, mask):
     union = ((pred + mask) * weit).sum(dim=(2, 3))
     wiou = 1 - (inter + 1) / (union - inter + 1)
 
-    return (wiou + wbce + loss_alpha + loss_lap).mean()
+    #focal loss
+    # focus = FocalLoss()
+    # focal_loss = focus(pred, mask)
+
+    if sw:
+        sw.add_scalar('alpha_loss', loss_alpha.mean().item(), global_step=global_step)
+        print('--loss_alpha--', loss_alpha.mean())
+
+    return (wiou + wbce + loss_alpha).mean()
 
 
 def main(Dataset, Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../data/' + args.dataset, savepath='./out_PPM', snapshot=args.resume,
-                               mode='train',
+    train_cfg = Dataset.Config(datapath='../data/' + args.dataset, savepath='./out', snapshot=args.resume, mode='train',
                                batch=args.batch_size,
                                lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
-    eval_cfg = Dataset.Config(datapath='../data/' + args.dataset, mode='test', eval_freq=1)
+    eval_cfg = Dataset.Config(datapath='../data/' + args.dataset, mode='test', batch=1, eval_freq=1)
 
     train_data = Dataset.Data(train_cfg)
 
@@ -211,7 +178,7 @@ def main(Dataset, Network):
 
     train_dataloader = DataLoader(train_data, collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True,
                                   num_workers=16)
-    eval_dataloader = DataLoader(eval_data, batch_size=1, shuffle=False, num_workers=16)
+    eval_dataloader = DataLoader(eval_data, batch_size=eval_cfg.batch, shuffle=False, num_workers=16)
 
     net = Network(train_cfg)
     net.train(True)
@@ -232,6 +199,15 @@ def main(Dataset, Network):
     net = nn.DataParallel(net, device_ids=[0, 1, 2, 3])
     net.cuda()
 
+    global global_step
+    global best_iou
+    if args.resume:
+        checkpoints = torch.load(args.resume)
+        global_step = checkpoints['step']
+        best_iou = checkpoints['best_iou']
+        print('current iter num:', global_step)
+        print('current best iou:', best_iou)
+
     if args.eval:
         evaluate(net, eval_dataloader)
 
@@ -243,39 +219,44 @@ def main(Dataset, Network):
         train(net, optimizer, train_dataloader, sw, epoch, train_cfg)
 
         if (epoch + 1) % eval_cfg.eval_freq == 0 or epoch == train_cfg.epochs - 1:
-            mae = evaluate(net, eval_dataloader)
+            mae, iou, loss = evaluate(net, eval_dataloader)
 
-            global best_mae
-            is_best = mae < best_mae
-            best_mae = min(mae, best_mae)
+            global best_iou
+            is_best = iou > best_iou
+            best_iou = max(iou, best_iou)
 
             save_checkpoints({
                 'epoch': epoch + 1,
                 'state_dict': net.state_dict(),
-                'best_mae': best_mae,
+                'best_iou': best_iou,
+                'step': global_step
             }, is_best, epoch, train_cfg)
 
-            log_stream.write('Valid MAE: {:.4f} \n'.format(mae))
+            log_stream.write('Valid MAE: {:.4f} Valid IOU: {:.4f} Valid Loss: {:.4f}\n'.format(mae, iou, loss))
             log_stream.flush()
+            sw.add_scalar('eval loss', loss, global_step=epoch+1)
 
 
 def evaluate(net, loader):
+    Loss = 0.0
     mae = cal_mae()
+    iou = cal_iou()
     net.eval()
 
     with torch.no_grad():
         for image, mask, shape, name in loader:
             image = image.cuda().float()
-            # mask_1 = torch.unsqueeze(mask, dim=0).cuda().float()
+            mask_1 = mask.unsqueeze(dim=1).cuda().float()
+            print('--mask--', mask_1.size())
             out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
-            # loss1u = structure_loss(out1u, mask_1)
-            # loss2u = structure_loss(out2u, mask_1)
-            #
-            # loss2r = structure_loss(out2r, mask_1)
-            # loss3r = structure_loss(out3r, mask_1)
-            # loss4r = structure_loss(out4r, mask_1)
-            # loss5r = structure_loss(out5r, mask_1)
-            # loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
+            loss1u = structure_loss(out1u, mask_1)
+            loss2u = structure_loss(out2u, mask_1)
+
+            loss2r = structure_loss(out2r, mask_1)
+            loss3r = structure_loss(out3r, mask_1)
+            loss4r = structure_loss(out4r, mask_1)
+            loss5r = structure_loss(out5r, mask_1)
+            loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
 
             out = out2u
             pred = (torch.sigmoid(out[0, 0])).cpu().numpy()
@@ -292,27 +273,29 @@ def evaluate(net, loader):
             else:
                 pred = (pred - pred.min()) / (pred.max() - pred.min())
             mae.update(pred, mask)
+            iou.update(pred, mask)
+            print('---eval loss---', loss)
+            Loss += loss
         Mae = mae.show()
+        Iou = iou.show()
+        print('---iou---', Iou)
 
-    return Mae
+    return Mae, Iou, Loss/len(loader)
 
 
 def train(net, optimizer, loader, sw, epoch, cfg):
     net.train()
     for step, (image, mask) in enumerate(loader):
         image, mask = image.cuda().float(), mask.cuda().float()
-        # print(image.shape) #(32,3,320,320)
-        # print(mask.shape) #(32,1,320,320)
-        # import sys
-        # sys.exit(0)
+
         out1u, out2u, out2r, out3r, out4r, out5r = net(image)
         loss1u = structure_loss(out1u, mask)
         loss2u = structure_loss(out2u, mask)
 
-        loss2r = structure_loss(out2r, mask)
-        loss3r = structure_loss(out3r, mask)
-        loss4r = structure_loss(out4r, mask)
-        loss5r = structure_loss(out5r, mask)
+        loss2r = structure_loss(out2r, mask, sw=sw)
+        loss3r = structure_loss(out3r, mask, )
+        loss4r = structure_loss(out4r, mask, )
+        loss5r = structure_loss(out5r, mask, )
         loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
 
         optimizer.zero_grad()
@@ -323,7 +306,9 @@ def train(net, optimizer, loader, sw, epoch, cfg):
         global global_step
         global_step += 1
         sw.add_scalar('lr', optimizer.param_groups[0]['lr'], global_step=global_step)
-        sw.add_scalar('loss', loss.item(), global_step=global_step)
+        sw.add_scalars('loss', {'loss1u': loss1u.item(), 'loss2u': loss2u.item(), 'loss2r': loss2r.item(),
+                                'loss3r': loss3r.item(), 'loss4r': loss4r.item(), 'loss5r': loss5r.item()},
+                       global_step=global_step)
         if step % 10 == 0:
             log_stream.write('%s | step:%d/%d/%d | lr=%.6f | loss=%.6f \n' % (
                 datetime.datetime.now(), global_step, epoch + 1, cfg.epochs, optimizer.param_groups[0]['lr'],
