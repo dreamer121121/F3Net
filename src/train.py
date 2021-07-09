@@ -21,12 +21,17 @@ import shutil
 import argparse
 
 import cv2
-from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm
+from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm, cal_iou
+
+from smoothing import gaussian_blur
+
+import torch.nn.functional as F
 
 log_stream = open('train.log', 'a')
 
 global_step = 0
 best_mae = float('inf')
+best_iou = 0.0
 
 
 def parse_args():
@@ -113,29 +118,29 @@ def generate_trimap(mask):
     return unknown / 255
 
 
-def structure_loss(pred, mask):
-    # wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
-    # wbce  = (weit*wbce).sum(dim=(2,3))/weit.sum(dim=(2,3))
-    #
-
+def structure_loss(pred, mask, sw=None):
     # add cortor loss
     N, C, W, H = mask.shape
-
     mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
+
     for i in range(N):
         f_mask = mask[i, :, :, :]
         f_mask_img = tensor2im(f_mask)
+        # e_y = cv2.erode(f_mask_img, kernel=kernal, iterations=1)
+        # # d_y = cv2.dilate(f_mask_img, kernel=kernal, iterations=1)
+        # m_c = cv2.GaussianBlur(5 * (f_mask_img[:, :, 0] - e_y), (5, 5), 0)
+        # m_c = m_c[:, :, np.newaxis]
         transition = generate_trimap(f_mask_img * 255)
         if transition.sum() == 0:
             transition = np.ones((W, H, C))
-        mc_matrix[i, :, :, :] = transition[:, :, :]
+        mc_matrix[i, :, :, :] =  transition[:, :, :]
 
+
+    # L = np.ones((N, W, H, C))
     W = im2tensor(mc_matrix).cuda()
     loss_alpha = torch.sqrt(
         torch.square((mask - torch.sigmoid(pred)) * W) + torch.square(torch.Tensor([1e-6]).cuda())).sum(
         dim=(2, 3)) / W.sum(dim=(2, 3))
-
-    print('--loss_alpha--', loss_alpha.mean())
 
     weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
     wbce = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
@@ -145,6 +150,14 @@ def structure_loss(pred, mask):
     inter = ((pred * mask) * weit).sum(dim=(2, 3))
     union = ((pred + mask) * weit).sum(dim=(2, 3))
     wiou = 1 - (inter + 1) / (union - inter + 1)
+
+    #focal loss
+    # focus = FocalLoss()
+    # focal_loss = focus(pred, mask)
+
+    if sw:
+        sw.add_scalar('alpha_loss', loss_alpha.mean().item(), global_step=global_step)
+        print('--loss_alpha--', loss_alpha.mean())
 
     return (wiou + wbce + loss_alpha).mean()
 
@@ -157,7 +170,7 @@ def main(Dataset, Network):
                                batch=args.batch_size,
                                lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
-    eval_cfg = Dataset.Config(datapath='../data/' + args.dataset, mode='test', eval_freq=1)
+    eval_cfg = Dataset.Config(datapath='../data/' + args.dataset, mode='test', batch=1, eval_freq=1)
 
     train_data = Dataset.Data(train_cfg)
 
@@ -165,7 +178,7 @@ def main(Dataset, Network):
 
     train_dataloader = DataLoader(train_data, collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True,
                                   num_workers=16)
-    eval_dataloader = DataLoader(eval_data, batch_size=1, shuffle=False, num_workers=16)
+    eval_dataloader = DataLoader(eval_data, batch_size=eval_cfg.batch, shuffle=False, num_workers=16)
 
     net = Network(train_cfg)
     net.train(True)
@@ -186,6 +199,15 @@ def main(Dataset, Network):
     net = nn.DataParallel(net, device_ids=[0, 1, 2, 3])
     net.cuda()
 
+    global global_step
+    global best_iou
+    if args.resume:
+        checkpoints = torch.load(args.resume)
+        global_step = checkpoints['step']
+        best_iou = checkpoints['best_iou']
+        print('current iter num:', global_step)
+        print('current best iou:', best_iou)
+
     if args.eval:
         evaluate(net, eval_dataloader)
 
@@ -197,31 +219,35 @@ def main(Dataset, Network):
         train(net, optimizer, train_dataloader, sw, epoch, train_cfg)
 
         if (epoch + 1) % eval_cfg.eval_freq == 0 or epoch == train_cfg.epochs - 1:
-            mae, loss = evaluate(net, eval_dataloader)
+            mae, iou, loss = evaluate(net, eval_dataloader)
 
-            global best_mae
-            is_best = mae < best_mae
-            best_mae = min(mae, best_mae)
+            global best_iou
+            is_best = iou > best_iou
+            best_iou = max(iou, best_iou)
 
             save_checkpoints({
                 'epoch': epoch + 1,
                 'state_dict': net.state_dict(),
-                'best_mae': best_mae,
+                'best_iou': best_iou,
+                'step': global_step
             }, is_best, epoch, train_cfg)
 
-            log_stream.write('Valid MAE: {:.4f} Loss {:.4f}\n'.format(mae, loss))
+            log_stream.write('Valid MAE: {:.4f} Valid IOU: {:.4f} Valid Loss: {:.4f}\n'.format(mae, iou, loss))
             log_stream.flush()
+            sw.add_scalar('eval loss', loss, global_step=epoch+1)
 
 
 def evaluate(net, loader):
     Loss = 0.0
     mae = cal_mae()
+    iou = cal_iou()
     net.eval()
 
     with torch.no_grad():
         for image, mask, shape, name in loader:
             image = image.cuda().float()
-            mask_1 = torch.unsqueeze(mask, dim=0).cuda().float()
+            mask_1 = mask.unsqueeze(dim=1).cuda().float()
+            print('--mask--', mask_1.size())
             out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
             loss1u = structure_loss(out1u, mask_1)
             loss2u = structure_loss(out2u, mask_1)
@@ -247,10 +273,14 @@ def evaluate(net, loader):
             else:
                 pred = (pred - pred.min()) / (pred.max() - pred.min())
             mae.update(pred, mask)
+            iou.update(pred, mask)
+            print('---eval loss---', loss)
             Loss += loss
         Mae = mae.show()
+        Iou = iou.show()
+        print('---iou---', Iou)
 
-    return Mae, Loss / len(loader)
+    return Mae, Iou, Loss/len(loader)
 
 
 def train(net, optimizer, loader, sw, epoch, cfg):
@@ -262,10 +292,10 @@ def train(net, optimizer, loader, sw, epoch, cfg):
         loss1u = structure_loss(out1u, mask)
         loss2u = structure_loss(out2u, mask)
 
-        loss2r = structure_loss(out2r, mask)
-        loss3r = structure_loss(out3r, mask)
-        loss4r = structure_loss(out4r, mask)
-        loss5r = structure_loss(out5r, mask)
+        loss2r = structure_loss(out2r, mask, sw=sw)
+        loss3r = structure_loss(out3r, mask, )
+        loss4r = structure_loss(out4r, mask, )
+        loss5r = structure_loss(out5r, mask, )
         loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
 
         optimizer.zero_grad()
