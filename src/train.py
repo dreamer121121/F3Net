@@ -182,8 +182,8 @@ def main(Dataset, Network):
     eval_data = Dataset.Data(eval_cfg)
 
     train_dataloader = DataLoader(train_data, collate_fn=train_data.collate, batch_size=train_cfg.batch, shuffle=True,
-                                  num_workers=16)
-    eval_dataloader = DataLoader(eval_data, batch_size=eval_cfg.batch, shuffle=False, num_workers=16)
+                                  num_workers=16, pin_memory=True)
+    eval_dataloader = DataLoader(eval_data, batch_size=eval_cfg.batch, shuffle=False, num_workers=16, pin_memory=True)
 
     net = Network(train_cfg)
     net.train(True)
