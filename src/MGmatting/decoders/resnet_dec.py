@@ -1,6 +1,6 @@
 import logging
 import torch.nn as nn
-from   networks.ops import SpectralNorm
+from   MGmatting.ops import SpectralNorm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

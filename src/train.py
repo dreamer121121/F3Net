@@ -27,7 +27,7 @@ from smoothing import gaussian_blur
 
 import torch.nn.functional as F
 
-log_stream = open('train.log', 'a')
+log_stream = open('train_MGmatting.log', 'a')
 
 global_step = 0
 best_mae = float('inf')
@@ -171,7 +171,7 @@ def main(Dataset, Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../data/' + args.dataset, savepath='./out', snapshot=args.resume, mode='train',
+    train_cfg = Dataset.Config(datapath='../data/' + args.dataset, savepath='./out_MGmatting', snapshot=args.resume, mode='train',
                                batch=args.batch_size,
                                lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
