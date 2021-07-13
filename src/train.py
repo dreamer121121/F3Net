@@ -27,7 +27,7 @@ from smoothing import gaussian_blur
 
 import torch.nn.functional as F
 
-log_stream = open('train_MGmatting.log', 'a')
+log_stream = open('train_L1.log', 'a')
 
 global_step = 0
 best_mae = float('inf')
@@ -123,17 +123,15 @@ def structure_loss(pred, mask, sw=None):
     N, C, W, H = mask.shape
     mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
 
+    L1_loss = 2*F.l1_loss(torch.sigmoid(pred), mask)
+
     #cal smooth loss
     smoothed_mask = gaussian_blur(mask, (9, 9), (2.5, 2.5))
-    smooth_loss = 5 * F.mse_loss(torch.sigmoid(pred), smoothed_mask)
+    smooth_loss = F.mse_loss(torch.sigmoid(pred), smoothed_mask)
 
     for i in range(N):
         f_mask = mask[i, :, :, :]
         f_mask_img = tensor2im(f_mask)
-        # e_y = cv2.erode(f_mask_img, kernel=kernal, iterations=1)
-        # # d_y = cv2.dilate(f_mask_img, kernel=kernal, iterations=1)
-        # m_c = cv2.GaussianBlur(5 * (f_mask_img[:, :, 0] - e_y), (5, 5), 0)
-        # m_c = m_c[:, :, np.newaxis]
         transition = generate_trimap(f_mask_img * 255)
         if transition.sum() == 0:
             transition = np.ones((W, H, C))
@@ -145,15 +143,6 @@ def structure_loss(pred, mask, sw=None):
         torch.square((mask - torch.sigmoid(pred)) * W) + torch.square(torch.Tensor([1e-6]).cuda())).sum(
         dim=(2, 3)) / W.sum(dim=(2, 3))
 
-    weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
-    wbce = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
-    wbce = (weit * wbce).sum(dim=(2, 3)) / weit.sum(dim=(2, 3))
-
-    pred = torch.sigmoid(pred)
-    inter = ((pred * mask) * weit).sum(dim=(2, 3))
-    union = ((pred + mask) * weit).sum(dim=(2, 3))
-    wiou = 1 - (inter + 1) / (union - inter + 1)
-
     #focal loss
     # focus = FocalLoss()
     # focal_loss = focus(pred, mask)
@@ -163,15 +152,17 @@ def structure_loss(pred, mask, sw=None):
         print('--loss_alpha--', loss_alpha.mean())
         print('--smooth loss--', smooth_loss)
         sw.add_scalar('smooth_loss', smooth_loss.item(), global_step=global_step)
+        print('---L1_loss--', L1_loss)
+        sw.add_scalar('L1_loss', L1_loss.item(), global_step=global_step)
 
-    return (wiou + wbce + loss_alpha).mean() + smooth_loss
+    return loss_alpha.mean() + smooth_loss + L1_loss
 
 
 def main(Dataset, Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../data/' + args.dataset, savepath='./out_MGmatting', snapshot=args.resume, mode='train',
+    train_cfg = Dataset.Config(datapath='../data/' + args.dataset, savepath='./out_L1', snapshot=args.resume, mode='train',
                                batch=args.batch_size,
                                lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
