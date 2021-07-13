@@ -7,8 +7,33 @@ import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from utils import CONFIG
+from MGmatting import encoders, decoders, ops
 
-# from train import log_stream
+
+#================add matting==============
+class MGModule(nn.Module):
+    def __init__(self, encoder, decoder):
+
+        super(MGModule, self).__init__()
+
+        if encoder not in encoders.__all__:
+            raise NotImplementedError("Unknown Encoder {}".format(encoder))
+        self.encoder = encoders.__dict__[encoder]()
+
+        self.aspp = ops.ASPP(in_channel=512, out_channel=512)
+
+        if decoder not in decoders.__all__:
+            raise NotImplementedError("Unknown Decoder {}".format(decoder))
+        self.decoder = decoders.__dict__[decoder]()
+
+    def forward(self, image, guidance):
+        inp = torch.cat((image, guidance), dim=1)
+        embedding, mid_fea = self.encoder(inp)
+        embedding = self.aspp(embedding)
+        pred = self.decoder(embedding, mid_fea)
+
+        return pred
 
 def weight_init(module):
     for n, m in module.named_children():
@@ -172,6 +197,11 @@ class F3Net(nn.Module):
         self.linearr5 = nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1)
         self.initialize()
 
+        #add MGmatting as refine module
+        self.rf_model_config = CONFIG.model
+
+        self.refine = MGModule(self.rf_model_config.arch.encoder, self.rf_model_config.arch.decoder)
+
     def forward(self, x, shape=None):
         out2h, out3h, out4h, out5v        = self.bkbone(x)
         out2h, out3h, out4h, out5v        = self.squeeze2(out2h), self.squeeze3(out3h), self.squeeze4(out4h), self.squeeze5(out5v)
@@ -186,8 +216,10 @@ class F3Net(nn.Module):
         out3h = F.interpolate(self.linearr3(out3h), size=shape, mode='bilinear')
         out4h = F.interpolate(self.linearr4(out4h), size=shape, mode='bilinear')
         out5h = F.interpolate(self.linearr5(out5v), size=shape, mode='bilinear')
-        return pred1, pred2, out2h, out3h, out4h, out5h
 
+        out_rf = self.refine(x, pred2)
+
+        return pred1, pred2, out2h, out3h, out4h, out5h, out_rf
 
     def initialize(self):
         if self.cfg.snapshot: #finetune
