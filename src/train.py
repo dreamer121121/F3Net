@@ -163,7 +163,7 @@ def main(Dataset, Network):
     train_cfg = Dataset.Config(datapath='../data/' + args.dataset, savepath='./out_L1', snapshot=args.resume,
                                mode='train',
                                batch=args.batch_size,
-                               lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start, self_refine_width1=30, self_refine_width2=15)
+                               lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start, self_refine_width1=30, self_refine_width2=15, rec_weight=1, comp_weight=1, lap_weight=1)
 
     eval_cfg = Dataset.Config(datapath='../data/' + args.dataset, mode='test', batch=1, eval_freq=1)
 
@@ -314,7 +314,6 @@ def train(net, optimizer, loader, sw, epoch, cfg):
                 alpha_pred_os4, mask, loss_type='L1', weight=weight_os4) * 1 + regression_loss(alpha_pred_os8, mask,
                                                                                                loss_type='L1',
                                                                                                weight=weight_os8) * 1) / 5.0 * cfg.rec_weight
-
         if cfg.comp_weight > 0:
             pass
 
