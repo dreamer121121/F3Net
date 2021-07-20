@@ -164,6 +164,7 @@ def evaluate(net,loader):
 
     return Mae
 
+
 def train(net,optimizer,loader,sw,epoch,cfg):
     net.train()
     for step, (image, mask) in enumerate(loader):

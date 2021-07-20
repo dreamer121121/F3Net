@@ -186,7 +186,7 @@ class Test(object):
             out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
 
             mask = (torch.sigmoid(out2u[0, 0]) * 255).cpu().numpy()
-            k = np.ones((3, 3), np.uint8)
+            k = np.ones((10, 10), np.uint8)
             # if args.crf:
             #     Q = self.dense_crf(user_image.astype(np.uint8), pred.cpu().numpy())
             #     print('--Q--', Q)
@@ -194,13 +194,12 @@ class Test(object):
             #     import sys
             #     sys.exit(0)
             if args.erd:
-                ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
+                #
+                # mask = cv2.erode(mask, (10,10))
 
-                mask = cv2.morphologyEx(img_thr, cv2.MORPH_OPEN, k)
+                ret, img_thr = cv2.threshold(mask, 153, 255, cv2.THRESH_BINARY)
 
-                mask = cv2.blur(mask, (3, 3))
-
-
+                mask = cv2.blur(img_thr, (3, 3))
 
                 # kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
                 #
