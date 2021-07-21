@@ -90,6 +90,11 @@ def im2tensor(image_numpy):
     return res
 
 
+def composite_loss(image, pred, mask):
+
+    return F.l1_loss(image * torch.sigmoid(pred), image * mask) + F.l1_loss(image * (1-torch.sigmoid(pred)), image * (1-mask))
+
+
 def generate_trimap(mask):
     dilation_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
     dilated = cv2.dilate(mask, dilation_kernel, iterations=5)
@@ -118,7 +123,7 @@ def generate_trimap(mask):
     return unknown / 255
 
 
-def structure_loss(pred, mask, sw=None):
+def structure_loss(image, pred, mask, sw=None):
     # add cortor loss
     N, C, W, H = mask.shape
     mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
@@ -158,12 +163,59 @@ def structure_loss(pred, mask, sw=None):
     # focus = FocalLoss()
     # focal_loss = focus(pred, mask)
 
+    #==================composite loss====================
+    comp_loss = composite_loss(image, pred, mask)
+
     if sw:
         sw.add_scalar('alpha_loss', loss_alpha.mean().item(), global_step=global_step)
-        print('--loss_alpha--', loss_alpha.mean())
+        sw.add_scalar('comp loss', comp_loss.item(), global_step=global_step)
+
+    return (wiou + wbce + loss_alpha).mean() + comp_loss
+
+
+def structure_loss_2(pred, mask, sw=None):
+    # add cortor loss
+    N, C, W, H = mask.shape
+    mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
+
+    #cal smooth loss
+    # smoothed_mask = gaussian_blur(mask, (9, 9), (2.5, 2.5))
+    # smooth_loss = 5 * F.mse_loss(torch.sigmoid(pred), smoothed_mask)
+
+    for i in range(N):
+        f_mask = mask[i, :, :, :]
+        f_mask_img = tensor2im(f_mask)
+        # e_y = cv2.erode(f_mask_img, kernel=kernal, iterations=1)
+        # # d_y = cv2.dilate(f_mask_img, kernel=kernal, iterations=1)
+        # m_c = cv2.GaussianBlur(5 * (f_mask_img[:, :, 0] - e_y), (5, 5), 0)
+        # m_c = m_c[:, :, np.newaxis]
+        transition = generate_trimap(f_mask_img * 255)
+        if transition.sum() == 0:
+            transition = np.ones((W, H, C))
+        mc_matrix[i, :, :, :] =  transition[:, :, :]
+
+    # L = np.ones((N, W, H, C))
+    W = im2tensor(mc_matrix).cuda()
+    loss_alpha = torch.sqrt(
+        torch.square((mask - torch.sigmoid(pred)) * W) + torch.square(torch.Tensor([1e-6]).cuda())).sum(
+        dim=(2, 3)) / W.sum(dim=(2, 3))
+
+    weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
+    wbce = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
+    wbce = (weit * wbce).sum(dim=(2, 3)) / weit.sum(dim=(2, 3))
+
+    pred = torch.sigmoid(pred)
+    inter = ((pred * mask) * weit).sum(dim=(2, 3))
+    union = ((pred + mask) * weit).sum(dim=(2, 3))
+    wiou = 1 - (inter + 1) / (union - inter + 1)
+
+    #focal loss
+    # focus = FocalLoss()
+    # focal_loss = focus(pred, mask)
+
+    #==================composite loss====================
 
     return (wiou + wbce + loss_alpha).mean()
-
 
 def main(Dataset, Network):
     ##parse args
@@ -173,7 +225,7 @@ def main(Dataset, Network):
                                batch=args.batch_size,
                                lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
-    eval_cfg = Dataset.Config(datapath='../data/' + args.dataset, mode='test', batch=1, eval_freq=1)
+    eval_cfg = Dataset.Config(datapath='../data/' + args.dataset, mode='test', batch=1, eval_freq=5)
 
     train_data = Dataset.Data(train_cfg)
 
@@ -248,13 +300,13 @@ def evaluate(net, loader):
             mask_1 = mask.unsqueeze(dim=1).cuda().float()
             print('--mask--', mask_1.size())
             out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
-            loss1u = structure_loss(out1u, mask_1)
-            loss2u = structure_loss(out2u, mask_1)
+            loss1u = structure_loss_2(out1u, mask_1)
+            loss2u = structure_loss_2(out2u, mask_1)
 
-            loss2r = structure_loss(out2r, mask_1)
-            loss3r = structure_loss(out3r, mask_1)
-            loss4r = structure_loss(out4r, mask_1)
-            loss5r = structure_loss(out5r, mask_1)
+            loss2r = structure_loss_2(out2r, mask_1)
+            loss3r = structure_loss_2(out3r, mask_1)
+            loss4r = structure_loss_2(out4r, mask_1)
+            loss5r = structure_loss_2(out5r, mask_1)
             loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
 
             out = out2u
@@ -291,13 +343,13 @@ def train(net, optimizer, loader, sw, epoch, cfg):
         # import sys
         # sys.exit(0)
         out1u, out2u, out2r, out3r, out4r, out5r = net(image)
-        loss1u = structure_loss(out1u, mask)
-        loss2u = structure_loss(out2u, mask)
+        loss1u = structure_loss(image, out1u, mask)
+        loss2u = structure_loss(image, out2u, mask)
 
-        loss2r = structure_loss(out2r, mask, sw=sw)
-        loss3r = structure_loss(out3r, mask, )
-        loss4r = structure_loss(out4r, mask, )
-        loss5r = structure_loss(out5r, mask, )
+        loss2r = structure_loss(image, out2r, mask, sw=sw)
+        loss3r = structure_loss(image, out3r, mask, )
+        loss4r = structure_loss(image, out4r, mask, )
+        loss5r = structure_loss(image, out5r, mask, )
         loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
 
         optimizer.zero_grad()
