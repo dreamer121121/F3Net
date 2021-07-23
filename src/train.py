@@ -123,11 +123,7 @@ def structure_loss(pred, mask, sw=None):
     N, C, W, H = mask.shape
     mc_matrix = np.zeros([N, W, H, C], dtype=np.float)
 
-    L1_loss = 2*F.l1_loss(torch.sigmoid(pred), mask)
-
-    #cal smooth loss
-    smoothed_mask = gaussian_blur(mask, (9, 9), (2.5, 2.5))
-    smooth_loss = F.mse_loss(torch.sigmoid(pred), smoothed_mask)
+    # L1_loss = 2*F.l1_loss(torch.sigmoid(pred), mask)
 
     for i in range(N):
         f_mask = mask[i, :, :, :]
@@ -139,23 +135,19 @@ def structure_loss(pred, mask, sw=None):
 
     # L = np.ones((N, W, H, C))
     W = im2tensor(mc_matrix).cuda()
-    loss_alpha = torch.sqrt(
+    loss_alpha_local = torch.sqrt(
         torch.square((mask - torch.sigmoid(pred)) * W) + torch.square(torch.Tensor([1e-6]).cuda())).sum(
         dim=(2, 3)) / W.sum(dim=(2, 3))
 
-    #focal loss
-    # focus = FocalLoss()
-    # focal_loss = focus(pred, mask)
+    loss_alpha_global = torch.sqrt(
+        torch.square((mask - torch.sigmoid(pred))) + torch.square(torch.Tensor([1e-6]).cuda())).sum(
+        dim=(2, 3)) / (mask.shape[2]*mask.shape[3])
 
     if sw:
-        sw.add_scalar('alpha_loss', loss_alpha.mean().item(), global_step=global_step)
-        print('--loss_alpha--', loss_alpha.mean())
-        print('--smooth loss--', smooth_loss)
-        sw.add_scalar('smooth_loss', smooth_loss.item(), global_step=global_step)
-        print('---L1_loss--', L1_loss)
-        sw.add_scalar('L1_loss', L1_loss.item(), global_step=global_step)
+        sw.add_scalar('alpha_loss', loss_alpha_local.mean().item(), global_step=global_step)
+        print('--loss_alpha--', loss_alpha_local.mean())
 
-    return loss_alpha.mean() + smooth_loss + L1_loss
+    return loss_alpha_local.mean()  + loss_alpha_global.mean()
 
 
 def main(Dataset, Network):
