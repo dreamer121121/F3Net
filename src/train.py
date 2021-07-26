@@ -27,12 +27,22 @@ from smoothing import gaussian_blur
 
 import torch.nn.functional as F
 
-log_stream = open('train_L1.log', 'a')
+
+log_stream = open('train.log', 'a')
+
 
 global_step = 0
 best_mae = float('inf')
 best_iou = 0.0
 
+gauss_filter = torch.tensor([[1., 4., 6., 4., 1.],
+                             [4., 16., 24., 16., 4.],
+                             [6., 24., 36., 24., 6.],
+                             [4., 16., 24., 16., 4.],
+                             [1., 4., 6., 4., 1.]]).cuda()
+
+gauss_filter /= 256.
+gauss_filter = gauss_filter.repeat(1, 1, 1, 1)
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -231,26 +241,19 @@ def structure_loss(image, pred, mask, sw=None):
 
     comp_loss = composite_loss(image, pred, mask)
 
-    gauss_filter = torch.tensor([[1., 4., 6., 4., 1.],
-                                      [4., 16., 24., 16., 4.],
-                                      [6., 24., 36., 24., 6.],
-                                      [4., 16., 24., 16., 4.],
-                                      [1., 4., 6., 4., 1.]]).cuda()
-    gauss_filter /= 256.
-    gauss_filter = gauss_filter.repeat(1, 1, 1, 1)
+    global gauss_filter
 
-    lapcian_loss = lap_loss(torch.sigmoid(pred), mask, gauss_filter, loss_type='L1')
-    lapcian_global_loss = lap_loss(torch.sigmoid(pred), mask, gauss_filter, loss_type='L1', weight=W)
+    lapcian_loss = lap_loss(torch.sigmoid(pred), mask, gauss_filter, loss_type='l1')
+    lapcian_global_loss = lap_loss(torch.sigmoid(pred), mask, gauss_filter, loss_type='l1', weight=W)
 
     if sw:
-        sw.add_scalar('alpha_local_loss', loss_alpha_local.mean().item(), global_step=global_step)
-        sw.add_scalar('alpha_global_loss', loss_alpha_global.mean().item(), global_step=global_step)
-        sw.add_scalar('comp_loss', comp_loss.item(), global_step=global_step)
-        sw.add_scalar('lapcian_global', lapcian_loss.item(), global_step=global_step)
-        sw.add_scalar('lapcian_local', lapcian_loss.item(), global_step=global_step)
+        sw.add_scalar('scalar/alpha_local_loss', loss_alpha_local.mean().item(), global_step=global_step)
+        sw.add_scalar('scalar/lapcian_local', lapcian_loss.item(), global_step=global_step)
+        sw.add_scalar('scalar/alpha_global_loss', loss_alpha_global.mean().item(), global_step=global_step)
+        sw.add_scalar('scalar/comp_loss', comp_loss.item(), global_step=global_step)
+        sw.add_scalar('scalar/lapcian_global', lapcian_global_loss.item(), global_step=global_step)
 
-    return lapcian_global_loss + loss_alpha_local.mean()  + loss_alpha_global.mean() + comp_loss + lapcian_loss
-
+    return lapcian_loss + loss_alpha_local.mean()  + loss_alpha_global.mean() + comp_loss + lapcian_global_loss
 
 def structure_loss_2(pred, mask, sw=None):
     # add cortor loss
@@ -277,9 +280,6 @@ def structure_loss_2(pred, mask, sw=None):
         torch.square((mask - torch.sigmoid(pred))) + torch.square(torch.Tensor([1e-6]).cuda())).sum(
         dim=(2, 3)) / (mask.shape[2] * mask.shape[3])
 
-    if sw:
-        sw.add_scalar('alpha_loss', loss_alpha_local.mean().item(), global_step=global_step)
-        print('--loss_alpha--', loss_alpha_local.mean())
 
     return loss_alpha_local.mean() + loss_alpha_global.mean()
 
@@ -288,7 +288,7 @@ def main(Dataset, Network):
     ##parse args
     args = parse_args()
 
-    train_cfg = Dataset.Config(datapath='../data/' + args.dataset, savepath='./out_L1', snapshot=args.resume, mode='train',
+    train_cfg = Dataset.Config(datapath='../data/' + args.dataset, savepath='./out', snapshot=args.resume, mode='train',
                                batch=args.batch_size,
                                lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
@@ -323,7 +323,7 @@ def main(Dataset, Network):
 
     global global_step
     if args.resume:
-        global_step = torch.load(args.resume)['step']
+        global_step = 0
     print(global_step)
 
     if args.eval:
@@ -365,15 +365,14 @@ def evaluate(net, loader):
         for image, mask, shape, name in loader:
             image = image.cuda().float()
             mask_1 = mask.unsqueeze(dim=1).cuda().float()
-            print('--mask--', mask_1.size())
             out1u, out2u, out2r, out3r, out4r, out5r = net(image, shape)
-            loss1u = structure_loss(out1u, mask_1)
-            loss2u = structure_loss(out2u, mask_1)
+            loss1u = structure_loss_2(out1u, mask_1)
+            loss2u = structure_loss_2(out2u, mask_1)
 
-            loss2r = structure_loss(out2r, mask_1)
-            loss3r = structure_loss(out3r, mask_1)
-            loss4r = structure_loss(out4r, mask_1)
-            loss5r = structure_loss(out5r, mask_1)
+            loss2r = structure_loss_2(out2r, mask_1)
+            loss3r = structure_loss_2(out3r, mask_1)
+            loss4r = structure_loss_2(out4r, mask_1)
+            loss5r = structure_loss_2(out5r, mask_1)
             loss = (loss1u + loss2u) / 2 + loss2r / 2 + loss3r / 4 + loss4r / 8 + loss5r / 16
 
             out = out2u
