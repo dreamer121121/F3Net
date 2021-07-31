@@ -128,12 +128,13 @@ class Test(object):
                 print("inference time: ", (total-datetime.datetime(1999,1,1))/cnt)
                 out   = out2u
                 mask  = (torch.sigmoid(out[0,0])*255).cpu().numpy()
-                k = np.ones((3, 3), np.uint8)
-                ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
+                if args.erd:
+                    k = np.ones((3, 3), np.uint8)
+                    ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
 
-                mask = cv2.morphologyEx(img_thr, cv2.MORPH_OPEN, k)
+                    mask = cv2.morphologyEx(img_thr, cv2.MORPH_OPEN, k)
 
-                mask = cv2.blur(mask, (3, 3))
+                    mask = cv2.blur(mask, (3, 3))
 
                 #
                 # Q = None
@@ -197,7 +198,7 @@ class Test(object):
                 #
                 # mask = cv2.erode(mask, (10,10))
 
-                ret, img_thr = cv2.threshold(mask, 153, 255, cv2.THRESH_BINARY)
+                ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
 
                 mask = cv2.blur(img_thr, (3, 3))
 
