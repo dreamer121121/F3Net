@@ -128,7 +128,15 @@ class Test(object):
                 total += datetime.datetime.now() - start
                 print("inference time: ", (total - datetime.datetime(1999, 1, 1)) / cnt)
                 out = out2u
-                pred = (torch.sigmoid(out[0, 0]) * 255).cpu().numpy()
+                mask = (torch.sigmoid(out[0, 0]) * 255).cpu().numpy()
+                if args.erd:
+                    k = np.ones((3, 3), np.uint8)
+                    ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
+
+                    mask = cv2.morphologyEx(img_thr, cv2.MORPH_OPEN, k)
+
+                    mask = cv2.blur(mask, (3, 3))
+
                 #
                 # Q = None
                 # if args.crf:
@@ -136,7 +144,7 @@ class Test(object):
                 head = '../eval/maps/F3Net/' + self.cfg.datapath.split('/')[-1]
                 if not os.path.exists(head):
                     os.makedirs(head)
-                cv2.imwrite(head + '/' + name[0] + '.png', np.round(pred))
+                cv2.imwrite(head + '/' + name[0] + '.png', np.round(mask))
                 # import sys
                 # sys.exit(0)
                 # print("inference time: ",(datetime.datetime.now()-start)/cnt)
@@ -146,7 +154,7 @@ class Test(object):
     def deploy(self):
 
         normalize = Normalize(mean=self.cfg.mean, std=self.cfg.std)
-        resize = Resize(352, 352)
+        resize = Resize(416, 416)
         totensor = ToTensor()
 
         fr = open(self.path + '/test.txt', 'r')
@@ -180,6 +188,7 @@ class Test(object):
             out1u, out2u, out2r, out3r, out4r, out5r = self.net(image, shape)
 
             mask = (torch.sigmoid(out2u[0, 0]) * 255).cpu().numpy()
+            k = np.ones((10, 10), np.uint8)
             # if args.crf:
             #     Q = self.dense_crf(user_image.astype(np.uint8), pred.cpu().numpy())
             #     print('--Q--', Q)
@@ -187,10 +196,18 @@ class Test(object):
             #     import sys
             #     sys.exit(0)
             if args.erd:
-                ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
-                kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+                #
+                # mask = cv2.erode(mask, (10,10))
 
-                mask = cv2.erode(img_thr, kernal, iterations=1)
+                ret, img_thr = cv2.threshold(mask, 128, 255, cv2.THRESH_BINARY)
+
+                mask = cv2.blur(img_thr, (3, 3))
+
+                # kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+                #
+                # mask = cv2.erode(mask, kernal, iterations=1)
+                #
+                # mask = cv2.dilate(mask, kernal, iterations=1)
 
             outimg = np.multiply(user_image, mask[:, :, np.newaxis] / 255)
 
@@ -205,7 +222,7 @@ class Test(object):
             #
             # outimg = np.dstack([outimg, alpha])
 
-            head = '../eval/result/F3Net/' + self.cfg.datapath.split('/')[-1]
+            head = '../eval/results/F3Net/' + self.cfg.datapath.split('/')[-1]
 
             if not os.path.exists(head):
                 os.makedirs(head)
