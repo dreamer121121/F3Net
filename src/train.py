@@ -33,7 +33,14 @@ global_step = 0
 best_mae = float('inf')
 best_iou = 0.0
 
+gauss_filter = torch.tensor([[1., 4., 6., 4., 1.],
+                             [4., 16., 24., 16., 4.],
+                             [6., 24., 36., 24., 6.],
+                             [4., 16., 24., 16., 4.],
+                             [1., 4., 6., 4., 1.]]).cuda()
 
+gauss_filter /= 256.
+gauss_filter = gauss_filter.repeat(1, 1, 1, 1)
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--eval',
@@ -123,6 +130,87 @@ def generate_trimap(mask):
     return unknown / 255
 
 
+def regression_loss(logit, target, loss_type='l1', weight=None):
+    """
+    Alpha reconstruction loss
+    :param logit:
+    :param target:
+    :param loss_type: "l1" or "l2"
+    :param weight: tensor with shape [N,1,H,W] weights for each pixel,
+    :return:
+    """
+    if weight is None:
+        if loss_type == 'l1':
+            return F.l1_loss(logit, target)
+        elif loss_type == 'l2':
+            return F.mse_loss(logit, target)
+        else:
+            raise NotImplementedError("NotImplemented loss type {}".format(loss_type))
+    else:
+        if loss_type == 'l1':
+            return F.l1_loss(logit * weight, target * weight, reduction='sum') / (torch.sum(weight) + 1e-8)
+        elif loss_type == 'l2':
+            return F.mse_loss(logit * weight, target * weight, reduction='sum') / (torch.sum(weight) + 1e-8)
+        else:
+            raise NotImplementedError("NotImplemented loss type {}".format(loss_type))
+
+
+def lap_loss(logit, target, gauss_filter, loss_type='l1', weight=None):
+    '''
+    Based on FBA Matting implementation:
+    https://gist.github.com/MarcoForte/a07c40a2b721739bb5c5987671aa5270
+    '''
+
+    def conv_gauss(x, kernel):
+        x = F.pad(x, (2, 2, 2, 2), mode='reflect')
+        x = F.conv2d(x, kernel, groups=x.shape[1])
+        return x
+
+    def downsample(x):
+        return x[:, :, ::2, ::2]
+
+    def upsample(x, kernel):
+        N, C, H, W = x.shape
+        cc = torch.cat([x, torch.zeros(N, C, H, W).cuda()], dim=3)
+        cc = cc.view(N, C, H * 2, W)
+        cc = cc.permute(0, 1, 3, 2)
+        cc = torch.cat([cc, torch.zeros(N, C, W, H * 2).cuda()], dim=3)
+        cc = cc.view(N, C, W * 2, H * 2)
+        x_up = cc.permute(0, 1, 3, 2)
+        return conv_gauss(x_up, kernel=4 * gauss_filter)
+
+    def lap_pyramid(x, kernel, max_levels=3):
+        current = x
+        pyr = []
+        for level in range(max_levels):
+            filtered = conv_gauss(current, kernel)
+            down = downsample(filtered)
+            up = upsample(down, kernel)
+            diff = current - up
+            pyr.append(diff)
+            current = down
+        return pyr
+
+    def weight_pyramid(x, max_levels=3):
+        current = x
+        pyr = []
+        for level in range(max_levels):
+            down = downsample(current)
+            pyr.append(current)
+            current = down
+        return pyr
+
+    pyr_logit = lap_pyramid(x=logit, kernel=gauss_filter, max_levels=5)
+    pyr_target = lap_pyramid(x=target, kernel=gauss_filter, max_levels=5)
+    if weight is not None:
+        pyr_weight = weight_pyramid(x=weight, max_levels=5)
+        return sum(regression_loss(A[0], A[1], loss_type=loss_type, weight=A[2]) * (2 ** i) for i, A in
+                   enumerate(zip(pyr_logit, pyr_target, pyr_weight)))
+    else:
+        return sum(regression_loss(A[0], A[1], loss_type=loss_type, weight=None) * (2 ** i) for i, A in
+                   enumerate(zip(pyr_logit, pyr_target)))
+
+
 def structure_loss(image, pred, mask, sw=None):
     # add cortor loss
     N, C, W, H = mask.shape
@@ -150,6 +238,8 @@ def structure_loss(image, pred, mask, sw=None):
         torch.square((mask - torch.sigmoid(pred)) * W) + torch.square(torch.Tensor([1e-6]).cuda())).sum(
         dim=(2, 3)) / W.sum(dim=(2, 3))
 
+    lapcian_loss = lap_loss(torch.sigmoid(pred), mask, gauss_filter, loss_type='l1', weight=W)
+
     weit = 1 + 5 * torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15) - mask)
     wbce = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
     wbce = (weit * wbce).sum(dim=(2, 3)) / weit.sum(dim=(2, 3))
@@ -167,10 +257,13 @@ def structure_loss(image, pred, mask, sw=None):
     comp_loss = composite_loss(image, pred, mask)
 
     if sw:
-        sw.add_scalar('alpha_loss', loss_alpha.mean().item(), global_step=global_step)
-        sw.add_scalar('comp loss', comp_loss.item(), global_step=global_step)
+        sw.add_scalar('scalar/alpha_loss', loss_alpha.mean().item(), global_step=global_step)
+        sw.add_scalar('scalar/comp loss', comp_loss.item(), global_step=global_step)
+        sw.add_scalar('scalar/lap loss', lapcian_loss.item(), global_step=global_step)
+        sw.add_scalar('scalar/wiou loss', wiou.mean().item(), global_step=global_step)
+        sw.add_scalar('scalar/wbce loss', wbce.mean().item(), global_step=global_step)
 
-    return (wiou + wbce + loss_alpha).mean() + comp_loss
+    return (wiou + wbce + loss_alpha).mean() + comp_loss + lapcian_loss
 
 
 def structure_loss_2(pred, mask, sw=None):
@@ -216,6 +309,7 @@ def structure_loss_2(pred, mask, sw=None):
     #==================composite loss====================
 
     return (wiou + wbce + loss_alpha).mean()
+
 
 def main(Dataset, Network):
     ##parse args
