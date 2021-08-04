@@ -252,15 +252,15 @@ def structure_loss(image, pred, mask, sw=None):
     # focal_loss = focus(pred, mask)
 
     #==================composite loss====================
-    comp_loss = composite_loss(image, pred, mask)
+    # comp_loss = composite_loss(image, pred, mask)
 
     if sw:
         sw.add_scalar('scalar/alpha_loss', loss_alpha.mean().item(), global_step=global_step)
-        sw.add_scalar('scalar/comp loss', comp_loss.item(), global_step=global_step)
+        # sw.add_scalar('scalar/comp loss', comp_loss.item(), global_step=global_step)
         sw.add_scalar('scalar/wiou loss', wiou.mean().item(), global_step=global_step)
         sw.add_scalar('scalar/wbce loss', wbce.mean().item(), global_step=global_step)
 
-    return (wiou + wbce + loss_alpha).mean() + comp_loss
+    return (wiou + wbce + loss_alpha).mean()
 
 
 def structure_loss_2(pred, mask, sw=None):
@@ -316,7 +316,7 @@ def main(Dataset, Network):
                                batch=args.batch_size,
                                lr=args.lr, momen=0.9, decay=args.decay, epochs=args.epochs, start=args.start)
 
-    eval_cfg = Dataset.Config(datapath='../data/' + args.dataset, mode='test', batch=1, eval_freq=5)
+    eval_cfg = Dataset.Config(datapath='../data/' + args.dataset, mode='test', batch=1, eval_freq=1)
 
     train_data = Dataset.Data(train_cfg)
 
