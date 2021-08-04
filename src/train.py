@@ -23,7 +23,7 @@ import argparse
 import cv2
 from saliency_metrics import cal_mae, cal_fm, cal_sm, cal_em, cal_wfm, cal_iou
 
-from smoothing import gaussian_blur
+# from smoothing import gaussian_blur
 
 import torch.nn.functional as F
 
